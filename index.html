@@ -199,7 +199,7 @@ header {
 }
 /* collapsed (1 row) by default; the inline toggle flips .fav-open to expand */
 .fav-row { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; height: 34px; overflow-y: auto; -webkit-overflow-scrolling: touch; transition: height .2s ease; }
-.fav.fav-open .fav-row { height: 112px; }
+.fav.fav-open .fav-row { height: 228px; }   /* expanded: pins take the entire shared block (peek collapses to 0) */
 .fav-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; margin-top: auto; }
 .fav-toggle { flex: 0 0 auto; height: 34px; display: flex; align-items: center; gap: 3px; background: none; border: none; padding: 0 2px; color: var(--text-dim); cursor: pointer; user-select: none; -webkit-user-select: none; }
 .fav-toggle:active { opacity: .55; }
@@ -222,7 +222,8 @@ header {
   transition: height .2s ease;
 }
 /* the peek grows to absorb the space freed by the pinned strip, so the tile board stays a constant size */
-.peek.peek-mid  { height: 194px; }   /* pinned strip present but collapsed (1 row): +78px ≈ the fav-row shrink */
+.peek.peek-min  { height: 0; min-height: 0; border-top-width: 0; overflow: hidden; }   /* pins EXPANDED: peek fully yields its space to the pinned area */
+.peek.peek-mid  { height: 194px; }   /* pins collapsed (1 row): peek takes the big viewing area */
 .peek.peek-tall { height: 260px; }   /* pinned strip hidden entirely (no pins) */
 .peek-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .peek-scroll > :first-child { margin-top: auto; }   /* keep newest pinned to the bottom while staying scrollable upward */
@@ -500,13 +501,14 @@ applyFontScale();
 
 /* ── pinned strip collapse/expand: star label toggles between 1 row and full height ── */
 function favOpen() { return !!(root.settings && root.settings.favOpen); }
-/* peek height tracks the pinned strip: hidden -> tall, collapsed -> mid, expanded -> normal.
-   The freed space goes to the peek so the tile board keeps its size. */
+/* peek and pinned strip swap the big space: no pins -> peek tall; pins collapsed -> peek mid (big);
+   pins expanded -> peek min (sliver) so the pinned area takes the room. Board stays constant. */
 function updatePeekHeight() {
   const peek = $("peek"); if (!peek) return;
   const empty = !state.favourites.length;
   peek.classList.toggle("peek-tall", empty);
   peek.classList.toggle("peek-mid", !empty && !favOpen());
+  peek.classList.toggle("peek-min", !empty && favOpen());
 }
 function applyFavOpen() { const f = $("fav"); if (f) f.classList.toggle("fav-open", favOpen()); updatePeekHeight(); }
 function toggleFav() { root.settings.favOpen = !favOpen(); store.save(); applyFavOpen(); }
@@ -1204,7 +1206,18 @@ async function exportBackup() {
 function openBackupMenu(anchor) {
   showPopup(anchor, [
     { label: "Export backup", icon: ICO_EXPORT, action: exportBackup },
-    { label: "Import backup", icon: ICO_IMPORT, action: () => $("importFile").click() }
+    { label: "Import backup", icon: ICO_IMPORT, action: () => $("importFile").click() },
+    { label: "Delete history", icon: ICO_DEL, danger: true, action: () => confirmClearHistory(anchor) }
+  ]);
+}
+/* clears the ACTIVE list's history only (tiles & pins kept); two-step confirm */
+function confirmClearHistory(anchor) {
+  const n = state.history.length;
+  if (!n) { toast("No history"); return; }
+  showPopup(anchor, [
+    { label: "Delete " + n + " history item" + (n > 1 ? "s" : ""), icon: ICO_DEL, danger: true, action: () => {
+        state.history = []; store.save(); renderHistory(); renderPeek(); toast("History cleared");
+    } }
   ]);
 }
 $("btnExport").addEventListener("click", () => openBackupMenu($("btnExport")));
