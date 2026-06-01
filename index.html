@@ -14,6 +14,10 @@
 <style>
 /* ══════════════ RESET & TOKENS ══════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+/* app-like behaviour: no text selection or iOS Copy/Look Up/Translate callout,
+   except inside real input fields (where paste / editing menus are still wanted) */
+* { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 
 :root {
   /* surfaces */
@@ -130,7 +134,7 @@ header {
   transition: transform .18s ease, box-shadow .15s ease, opacity .2s ease;
   touch-action: pan-y;
 }
-.tile .tile-text { line-height: 1.15; word-break: break-word; hyphens: auto; max-width: 100%; }
+.tile .tile-text { line-height: 1.15; word-break: break-word; hyphens: auto; max-width: 100%; font-weight: 500; }
 .tile.sel { border-color: var(--accent); outline: 3px solid var(--accent-soft); outline-offset: 0; }
 /* important flag — wide blurred bright-pink highlighter, layers over any fill colour */
 .tile.important { box-shadow: 0 0 0 3px #ff2d9b, 0 0 16px 6px rgba(255,45,155,.7); }
@@ -192,9 +196,14 @@ header {
   padding: 8px 10px; padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
 }
 /* reserves ~3 rows then scrolls vertically; chips bottom-align (newest at bottom) */
-.fav-row { display: flex; flex-direction: column; height: 112px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* collapsed (1 row) by default; the star label toggles .fav-open to expand */
+.fav-row { display: flex; flex-direction: column; height: 40px; overflow-y: auto; -webkit-overflow-scrolling: touch; transition: height .2s ease; }
+.fav.fav-open .fav-row { height: 112px; }
 .fav-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; margin-top: auto; }
-.fav-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-mute); margin-bottom: 5px; display: flex; align-items: center; gap: 5px; }
+.fav-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); margin-bottom: 5px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; padding: 2px 0; }
+.fav-label:active { opacity: .6; }
+.fav-chev { transition: transform .2s ease; }
+.fav.fav-open .fav-chev { transform: rotate(180deg); }
 .fav-chip {
   flex: 0 0 auto; background: var(--chip); border: 1px solid var(--line);
   border-radius: 999px; padding: 7px 13px; font-size: calc(14px * var(--fs)); font-weight: 500;
@@ -209,12 +218,15 @@ header {
   border-top: 1px solid var(--line); position: relative;
   display: flex; flex-direction: column;
   padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
+  transition: height .2s ease;
 }
-.peek.peek-tall { height: 260px; }   /* absorbs the space freed when the pinned strip is hidden */
+/* the peek grows to absorb the space freed by the pinned strip, so the tile board stays a constant size */
+.peek.peek-mid  { height: 188px; }   /* pinned strip present but collapsed (1 row): +72px ≈ the fav-row shrink */
+.peek.peek-tall { height: 260px; }   /* pinned strip hidden entirely (no pins) */
 .peek-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .peek-scroll > :first-child { margin-top: auto; }   /* keep newest pinned to the bottom while staying scrollable upward */
-.peek-line { font-size: calc(16.5px * var(--fs)); color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
-.peek-line b { color: var(--text); font-weight: 500; }
+.peek-line { font-size: calc(15.5px * var(--fs)); color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
+.peek-line b { color: var(--text); font-weight: 400; }
 .peek-line time { margin-left: auto; font-size: calc(13px * var(--fs)); color: var(--text-dim); flex: 0 0 auto; }
 
 /* ══════════════ COMPOSER ══════════════ */
@@ -308,7 +320,7 @@ header {
     <button class="hd-btn" id="btnFont" title="Text size">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="none"><text x="0.5" y="18" font-size="16" font-weight="800">A</text><text x="13" y="13" font-size="12" font-weight="800">+</text></svg>
     </button>
-    <button class="hd-btn" id="btnHistory" title="Toggle view"></button>
+    <button class="hd-btn" id="btnHistory" title="Toggle view · hold to clear completed"></button>
     <button class="hd-btn" id="btnExport" title="Backup / restore">
       <svg class="icon" viewBox="0 0 24 24"><path d="M3 7l1.5-2.5A1 1 0 015.4 4h13.2a1 1 0 01.9.5L21 7"/><path d="M4 7h16v11a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M9 12h6"/></svg>
     </button>
@@ -336,8 +348,9 @@ header {
 
   <!-- FAVOURITES -->
   <div class="fav" id="fav">
-    <div class="fav-label">
-      <svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M12 17.3l-6 3.7 1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.6 4.9L18 21z"/></svg>
+    <div class="fav-label" id="favToggle" title="Pinned · tap to expand / collapse">
+      <svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 17.3l-6 3.7 1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.6 4.9L18 21z"/></svg>
+      <svg class="icon fav-chev" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M6 9l6 6 6-6"/></svg>
     </div>
     <div class="fav-row" id="favRow"><div class="fav-chips" id="favChips"></div></div>
   </div>
@@ -378,7 +391,7 @@ header {
       <button class="hd-btn" id="btnFontH" title="Text size">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="none"><text x="0.5" y="18" font-size="16" font-weight="800">A</text><text x="13" y="13" font-size="12" font-weight="800">+</text></svg>
       </button>
-      <button class="hd-btn" id="btnHistoryH" title="Toggle view"></button>
+      <button class="hd-btn" id="btnHistoryH" title="Toggle view · hold to clear completed"></button>
       <button class="hd-btn" id="btnExportH" title="Backup / restore">
         <svg class="icon" viewBox="0 0 24 24"><path d="M3 7l1.5-2.5A1 1 0 015.4 4h13.2a1 1 0 01.9.5L21 7"/><path d="M4 7h16v11a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M9 12h6"/></svg>
       </button>
@@ -480,6 +493,21 @@ function cycleFont() {
 $("btnFont").addEventListener("click", cycleFont);
 { const b = $("btnFontH"); if (b) b.addEventListener("click", cycleFont); }
 applyFontScale();
+
+/* ── pinned strip collapse/expand: star label toggles between 1 row and full height ── */
+function favOpen() { return !!(root.settings && root.settings.favOpen); }
+/* peek height tracks the pinned strip: hidden -> tall, collapsed -> mid, expanded -> normal.
+   The freed space goes to the peek so the tile board keeps its size. */
+function updatePeekHeight() {
+  const peek = $("peek"); if (!peek) return;
+  const empty = !state.favourites.length;
+  peek.classList.toggle("peek-tall", empty);
+  peek.classList.toggle("peek-mid", !empty && !favOpen());
+}
+function applyFavOpen() { const f = $("fav"); if (f) f.classList.toggle("fav-open", favOpen()); updatePeekHeight(); }
+function toggleFav() { root.settings.favOpen = !favOpen(); store.save(); applyFavOpen(); }
+$("favToggle").addEventListener("click", toggleFav);
+applyFavOpen();
 
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
@@ -681,7 +709,7 @@ function startEditById(id) {
   el.innerHTML = "";
   const inp = document.createElement("input");
   inp.className = "tile-edit"; inp.value = t.text; inp.setAttribute("enterkeyhint", "done");
-  el.appendChild(inp); inp.focus(); inp.select();
+  el.appendChild(inp); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
   let closed = false;
   const commit = (save) => {
     if (closed) return; closed = true;
@@ -740,6 +768,16 @@ function deleteTile(id) {
   state.tiles = state.tiles.filter(t => t.id !== id);
   selected.delete(id);
   store.save(); renderTiles();
+}
+
+/* clear all completed (done) tiles in the active list; History is untouched */
+function clearDoneTiles() {
+  const done = state.tiles.filter(t => t.done);
+  if (!done.length) { toast("No completed items"); return; }
+  done.forEach(t => selected.delete(t.id));
+  state.tiles = state.tiles.filter(t => !t.done);
+  store.save(); renderTiles();
+  toast(done.length + " completed cleared");
 }
 
 function applyColorToSelected(color) {
@@ -801,12 +839,12 @@ function renderFav() {
   // collapse the whole pinned strip when empty; let the history peek take the space
   if (!state.favourites.length) {
     $("fav").style.display = "none";
-    $("peek").classList.add("peek-tall");
+    updatePeekHeight();
     box.innerHTML = "";
     return;
   }
   $("fav").style.display = "";
-  $("peek").classList.remove("peek-tall");
+  updatePeekHeight();
   const prev = row.scrollTop;
   const wasBottom = row.scrollHeight - prev - row.clientHeight < 40;
   box.innerHTML = "";
@@ -987,7 +1025,7 @@ function startEditHistory(h) {
   const span = b.querySelector("span"); if (!span) return;
   const inp = document.createElement("input");
   inp.className = "bubble-edit"; inp.value = h.text; inp.setAttribute("enterkeyhint", "done");
-  span.replaceWith(inp); inp.focus(); inp.select();
+  span.replaceWith(inp); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
   let closed = false;
   const commit = (save) => {
     if (closed) return; closed = true;
@@ -1006,6 +1044,14 @@ function openTilePopup(t, el) {
     { label: t.done ? "Mark active" : "Mark done", icon: ICO_CHK, action: () => { t.done = !t.done; store.save(); renderTiles(); } },
     { label: "Pin", icon: ICO_PIN, action: () => pinItem(t.text) },
     { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteTile(t.id) }
+  ]);
+}
+/* long-press the view-toggle → deliberate "clear completed" action */
+function openClearDoneMenu(anchor) {
+  const n = state.tiles.filter(t => t.done).length;
+  if (!n) { toast("No completed items"); return; }
+  showPopup(anchor, [
+    { label: "Clear completed (" + n + ")", icon: ICO_DEL, danger: true, action: clearDoneTiles }
   ]);
 }
 function openFavPopup(f) {
@@ -1106,8 +1152,9 @@ function setView(mode) {
   store.save();
 }
 function toggleView() { setView($("history").classList.contains("open") ? "main" : "history"); }
-$("btnHistory").addEventListener("click", toggleView);
-$("btnHistoryH").addEventListener("click", toggleView);
+/* single tap toggles view; long-press clears completed items in the active list */
+gestures($("btnHistory"), { tap: toggleView, longPress: () => openClearDoneMenu($("btnHistory")) });
+gestures($("btnHistoryH"), { tap: toggleView, longPress: () => openClearDoneMenu($("btnHistoryH")) });
 /* history-page header buttons mirror the main header */
 $("btnListH").addEventListener("click", () => openListMenu($("btnListH")));
 $("btnShareH").addEventListener("click", shareList);
@@ -1168,7 +1215,7 @@ $("importFile").addEventListener("change", (e) => {
       root = normalize(obj);                       // restores all lists
       state = ensureList(root.activeList);
       selected.clear(); firstTiles = true; firstFav = true;
-      applyFontScale();
+      applyFontScale(); applyFavOpen();
       store.saveNow(); renderAll(); updateListButton(); toast("Backup restored");
     } catch (err) { toast("Invalid backup file"); }
   };
