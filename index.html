@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ManoList">
+<meta name="theme-color" content="#3b5bdb">
+<meta name="description" content="ManoList — Signal-style colour-coded list app">
+<title>ManoList</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20512%20512'%3E%3Crect%20width='512'%20height='512'%20rx='96'%20fill='%233b5bdb'/%3E%3Crect%20x='112'%20y='150'%20width='84'%20height='62'%20rx='14'%20fill='%23ffd8a8'/%3E%3Crect%20x='214'%20y='150'%20width='84'%20height='62'%20rx='14'%20fill='%23b2f2bb'/%3E%3Crect%20x='316'%20y='150'%20width='84'%20height='62'%20rx='14'%20fill='%23a5d8ff'/%3E%3Crect%20x='112'%20y='228'%20width='84'%20height='62'%20rx='14'%20fill='%23d0bfff'/%3E%3Crect%20x='214'%20y='228'%20width='84'%20height='62'%20rx='14'%20fill='%23fcc2d7'/%3E%3Crect%20x='316'%20y='228'%20width='84'%20height='62'%20rx='14'%20fill='%23ffffff'/%3E%3Crect%20x='112'%20y='306'%20width='288'%20height='62'%20rx='14'%20fill='%23ffffff'%20opacity='0.6'/%3E%3C/svg%3E">
+<style>
+/* ══════════════ RESET & TOKENS ══════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  /* surfaces */
+  --bg:           #eceef3;
+  --surface:      #ffffff;
+  --header:       #f7f8fb;
+  --line:         #dfe3ea;
+  --text:         #1d2330;
+  --text-dim:     #6b7280;
+  --text-mute:    #9aa1ad;
+  --accent:       #3b5bdb;
+  --accent-soft:  #e7ecfd;
+  --danger:       #e03131;
+  --bubble:       #3b5bdb;
+  --bubble-text:  #ffffff;
+  --chip:         #eef0f4;
+  /* swatch pastels */
+  --c-blue:   #a5d8ff;
+  --c-green:  #b2f2bb;
+  --c-purple: #d0bfff;
+  --c-yellow: #ffe680;
+  --radius:   14px;
+  --radius-sm:10px;
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rail-w: 45px;   /* swatch-rail width; doubles as the right gutter so all scrollbars align */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+html, body { height: 100%; width: 100%; overflow: hidden; background: var(--bg); }
+body { font-family: var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+/* app fills the visual viewport (keyboard-aware via JS) */
+#app {
+  height: var(--app-h, 100dvh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ══════════════ HEADER ══════════════ */
+header {
+  flex: 0 0 auto;
+  padding-top: var(--safe-top);
+  background: var(--header);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px; padding-right: 10px;
+  min-height: 44px;
+}
+.hd-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--accent-soft);
+  display: grid; place-items: center;
+  flex: 0 0 auto;
+}
+.hd-title { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.hd-title h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.verified { width: 16px; height: 16px; flex: 0 0 auto; }
+.hd-btn {
+  flex: 0 0 auto; border: none; background: none; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--accent);
+}
+.hd-btn:active { background: var(--accent-soft); }
+/* list switcher button: current digit + chevron */
+.hd-list { width: auto; min-width: 40px; padding: 0 8px; gap: 1px; display: inline-flex; align-items: center; justify-content: center; }
+.hd-list #listNum { font-size: 16px; font-weight: 700; line-height: 1; }
+/* 0–9 grid picker inside the popup */
+.list-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; }
+.list-cell {
+  position: relative; width: 46px; height: 46px; border: 1.5px solid var(--line); background: var(--surface);
+  border-radius: 12px; font-size: 18px; font-weight: 600; color: var(--text); cursor: pointer;
+  display: grid; place-items: center;
+}
+.list-cell:active { transform: scale(.94); }
+.list-cell.cur { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.list-cell .cnt {
+  position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px;
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px;
+  border-radius: 999px; text-align: center;
+}
+.list-grid-title { padding: 12px 12px 0; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-mute); }
+
+/* ══════════════ BOARD (tiles + rail) ══════════════ */
+.board { flex: 1 1 auto; position: relative; min-height: 0; display: flex; }
+.tiles-scroll {
+  flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 12px 12px 8px 12px;
+  display: flex; flex-direction: column;   /* lets the grid bottom-align (newest at bottom) */
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: var(--tile-h, 74px);
+  gap: 9px;
+  flex: 0 0 auto; margin-top: auto;   /* pin to bottom; grows upward, scrolls when full */
+}
+.tile {
+  position: relative;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  display: grid; place-items: center;
+  text-align: center;
+  padding: 6px;
+  overflow: hidden;
+  user-select: none; -webkit-user-select: none;
+  transition: transform .18s ease, box-shadow .15s ease, opacity .2s ease;
+  touch-action: pan-y;
+}
+.tile .tile-text { line-height: 1.15; word-break: break-word; hyphens: auto; max-width: 100%; }
+.tile.sel { border-color: var(--accent); outline: 3px solid var(--accent-soft); outline-offset: 0; }
+/* important flag — wide blurred bright-pink highlighter, layers over any fill colour */
+.tile.important { box-shadow: 0 0 0 3px #ff2d9b, 0 0 16px 6px rgba(255,45,155,.7); }
+.tile.done .tile-text { text-decoration: line-through; text-decoration-thickness: 2px; }
+.tile.done { opacity: .55; }
+.tile.swipe-del { transform: translateX(-120%); opacity: 0; }
+.tile.swipe-pin { transform: translateX(120%); opacity: 0; }
+.tile[data-c="blue"]   { background: var(--c-blue);   border-color: #74c0fc; }
+.tile[data-c="green"]  { background: var(--c-green);  border-color: #69db7c; }
+.tile[data-c="purple"] { background: var(--c-purple); border-color: #b197fc; }
+.tile[data-c="yellow"] { background: var(--c-yellow); border-color: #ffd43b; }
+
+.tiles-empty { color: var(--text-mute); font-size: 14px; text-align: center; padding: 30px 16px; line-height: 1.5; }
+
+/* drag-to-reorder + inline edit */
+.tile.lifted { opacity: .28; }
+.tile.drop-target { box-shadow: inset 0 0 0 3px var(--accent); }
+.tile-ghost {
+  position: fixed; z-index: 80; pointer-events: none; margin: 0;
+  display: grid; place-items: center; text-align: center; padding: 6px; overflow: hidden;
+  border-radius: var(--radius); box-shadow: 0 12px 28px rgba(0,0,0,.28);
+  transform: scale(1.06); transition: none;
+}
+.tile-edit {
+  width: 100%; border: none; background: rgba(255,255,255,.85); border-radius: 8px;
+  text-align: center; font-family: var(--font); font-size: 14px; padding: 5px 4px;
+  outline: 2px solid var(--accent); color: var(--text);
+}
+
+/* swatch rail */
+.rail {
+  flex: 0 0 auto; width: var(--rail-w); padding: 12px 6px 8px 0;
+  display: flex; flex-direction: column; gap: 9px;   /* matches the tile grid gap so rows align */
+}
+.swatch {
+  flex: 1 1 0; min-height: 30px; border-radius: 8px;
+  border: 1.5px solid rgba(0,0,0,.12);
+  cursor: pointer; position: relative;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.swatch:active { transform: scale(.92); }
+.swatch.active { outline: 3px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+.swatch[data-c="blue"]   { background: var(--c-blue); }
+.swatch[data-c="green"]  { background: var(--c-green); }
+.swatch[data-c="purple"] { background: var(--c-purple); }
+.swatch[data-c="yellow"] { background: var(--c-yellow); }
+.swatch[data-c="clear"]  {
+  background:
+    linear-gradient(45deg, #e9ecf1 25%, transparent 25%, transparent 75%, #e9ecf1 75%) 0 0/12px 12px,
+    linear-gradient(45deg, #e9ecf1 25%, #fff 25%, #fff 75%, #e9ecf1 75%) 6px 6px/12px 12px,
+    #fff;
+}
+/* important-flag swatch: white centre ringed by the bright-pink highlighter */
+.swatch[data-c="outline"] { background: #fff; box-shadow: inset 0 0 0 3px #ff2d9b, inset 0 0 9px 2px rgba(255,45,155,.65); }
+
+/* ══════════════ FAVOURITES ══════════════ */
+.fav {
+  flex: 0 0 auto; background: var(--header); border-top: 1px solid var(--line);
+  padding: 8px 10px; padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
+}
+/* reserves ~3 rows then scrolls vertically; chips bottom-align (newest at bottom) */
+.fav-row { display: flex; flex-direction: column; height: 112px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fav-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; margin-top: auto; }
+.fav-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-mute); margin-bottom: 5px; display: flex; align-items: center; gap: 5px; }
+.fav-chip {
+  flex: 0 0 auto; background: var(--chip); border: 1px solid var(--line);
+  border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 500;
+  white-space: nowrap; cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+}
+.fav-chip:active { background: #e2e6ec; transform: scale(.96); }
+.fav-empty { font-size: 12px; color: var(--text-mute); padding: 4px 2px; }
+
+/* ══════════════ HISTORY PEEK ══════════════ */
+.peek {
+  flex: 0 0 auto; height: 116px; background: var(--bg);
+  border-top: 1px solid var(--line); position: relative;
+  display: flex; flex-direction: column;
+  padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
+}
+.peek.peek-tall { height: 260px; }   /* absorbs the space freed when the pinned strip is hidden */
+.peek-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
+.peek-scroll > :first-child { margin-top: auto; }   /* keep newest pinned to the bottom while staying scrollable upward */
+.peek-line { font-size: 12.5px; color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
+.peek-line b { color: var(--text); font-weight: 500; }
+.peek-line time { margin-left: auto; font-size: 10.5px; color: var(--text-mute); flex: 0 0 auto; }
+
+/* ══════════════ COMPOSER ══════════════ */
+.composer {
+  flex: 0 0 auto; background: var(--header); border-top: 1px solid var(--line);
+  padding: 8px 10px calc(8px + var(--safe-bottom)) 10px;
+  display: flex; align-items: flex-end; gap: 8px;
+}
+.comp-btn { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; border: none; background: none; display: grid; place-items: center; color: var(--text-dim); cursor: pointer; }
+.comp-btn:active { background: var(--chip); }
+.comp-field { flex: 1 1 auto; display: flex; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 3px 6px 3px 14px; min-height: 38px; }
+.comp-field textarea {
+  flex: 1 1 auto; border: none; outline: none; resize: none; background: none;
+  font-family: var(--font); font-size: 16px; line-height: 1.3; color: var(--text);
+  max-height: 120px; padding: 8px 0; overflow-y: auto;
+}
+.comp-icons { display: flex; align-items: center; gap: 2px; }
+.comp-icons button { width: 32px; height: 32px; border: none; background: none; display: grid; place-items: center; color: var(--text-dim); cursor: pointer; border-radius: 50%; }
+.comp-icons button:active { background: var(--chip); }
+.send-btn { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: none; place-items: center; cursor: pointer; }
+.send-btn.show { display: grid; }
+.send-btn:active { filter: brightness(.92); }
+
+/* ══════════════ HISTORY OVERLAY ══════════════ */
+.history {
+  position: absolute; inset: 0; background: var(--bg); z-index: 30;
+  display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform .25s ease; visibility: hidden;
+}
+.history.open { transform: translateX(0); visibility: visible; }
+.hist-head {
+  flex: 0 0 auto; padding-top: var(--safe-top); background: var(--header); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 8px; padding-left: 6px; padding-right: 14px; min-height: 52px;
+}
+.hist-head h2 { font-size: 17px; font-weight: 600; line-height: 1.1; }
+.hist-title { display: flex; flex-direction: column; }
+.hist-title span { font-size: 11px; color: var(--text-mute); letter-spacing: .3px; }
+.hist-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 10px 14px calc(20px + var(--safe-bottom)); }
+.date-sep { text-align: center; margin: 14px 0 10px; }
+.date-sep span { background: #dde1ea; color: var(--text-dim); font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; }
+.bubble-wrap { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.bubble {
+  background: var(--bubble); color: var(--bubble-text); border-radius: 16px 16px 4px 16px;
+  padding: 9px 13px; max-width: 78%; font-size: 15px; line-height: 1.3;
+  position: relative; cursor: pointer; user-select: none; -webkit-user-select: none;
+  display: flex; align-items: flex-end; gap: 8px;
+}
+/* highlight flag — same bright-pink highlighter as the main-screen tiles */
+.bubble.hi { box-shadow: 0 0 0 2px #ff2d9b, 0 0 14px 5px rgba(255,45,155,.6); }
+.bubble time { font-size: 10.5px; color: rgba(255,255,255,.7); flex: 0 0 auto; }
+.bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: none; background: rgba(255,255,255,.22); color: #fff; font-family: var(--font); font-size: 15px; border-radius: 8px; padding: 3px 7px; }
+.hist-empty { color: var(--text-mute); text-align: center; padding: 60px 20px; line-height: 1.5; }
+
+/* context popup */
+.popup-mask { position: absolute; inset: 0; z-index: 40; display: none; }
+.popup-mask.open { display: block; }
+.popup {
+  position: absolute; background: var(--surface); border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.22); overflow: hidden; min-width: 150px;
+}
+.popup button { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: none; padding: 13px 16px; font-size: 15px; cursor: pointer; color: var(--text); }
+.popup button:active { background: var(--chip); }
+.popup button.danger { color: var(--danger); }
+.popup button + button { border-top: 1px solid var(--line); }
+
+/* toast */
+.toast {
+  position: absolute; bottom: calc(80px + var(--safe-bottom)); left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #222; color: #fff; padding: 9px 16px; border-radius: 999px; font-size: 13px;
+  opacity: 0; transition: opacity .2s, transform .2s; z-index: 60; pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.icon { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- HEADER -->
+  <header>
+    <div class="hd-icon">
+      <svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--accent)"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M18 7l2 2 3-3"/></svg>
+    </div>
+    <div class="hd-title">
+      <h1>ManoList</h1>
+    </div>
+    <button class="hd-btn hd-list" id="btnList" title="Switch list">
+      <span id="listNum">1</span>
+      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <button class="hd-btn" id="btnHistory" title="Toggle view"></button>
+    <button class="hd-btn" id="btnExport" title="Backup / restore">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 7l1.5-2.5A1 1 0 015.4 4h13.2a1 1 0 01.9.5L21 7"/><path d="M4 7h16v11a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M9 12h6"/></svg>
+    </button>
+    <button class="hd-btn" id="btnShare" title="Share list">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v13"/><path d="M8 7l4-4 4 4"/><path d="M6 12H5a2 2 0 00-2 2v5a2 2 0 002 2h14a2 2 0 002-2v-5a2 2 0 00-2-2h-1"/></svg>
+    </button>
+  </header>
+
+  <!-- BOARD -->
+  <div class="board">
+    <div class="tiles-scroll" id="tilesScroll">
+      <div class="tiles" id="tiles"></div>
+      <div class="tiles-empty" id="tilesEmpty"></div>
+    </div>
+    <div class="rail" id="rail">
+      <div class="swatch" data-c="clear" title="No fill"></div>
+      <!-- fills: cool -> warm spectrum -->
+      <div class="swatch" data-c="purple"></div>
+      <div class="swatch" data-c="blue"></div>
+      <div class="swatch" data-c="green"></div>
+      <div class="swatch" data-c="yellow"></div>
+      <div class="swatch" data-c="outline" title="Flag important"></div>
+    </div>
+  </div>
+
+  <!-- FAVOURITES -->
+  <div class="fav" id="fav">
+    <div class="fav-label">
+      <svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M12 17.3l-6 3.7 1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.6 4.9L18 21z"/></svg>
+    </div>
+    <div class="fav-row" id="favRow"><div class="fav-chips" id="favChips"></div></div>
+  </div>
+
+  <!-- HISTORY PEEK -->
+  <div class="peek" id="peek">
+    <div class="peek-scroll" id="peekScroll"></div>
+  </div>
+
+  <!-- COMPOSER -->
+  <div class="composer">
+    <button class="comp-btn" id="btnPlus" title="Attach (coming soon)">
+      <svg class="icon" viewBox="0 0 24 24" style="width:26px;height:26px"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+    </button>
+    <div class="comp-field">
+      <textarea id="input" rows="1" placeholder="Note to Self" enterkeyhint="done"></textarea>
+      <div class="comp-icons">
+        <button id="btnCamera" title="Camera (coming soon)"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.2"/></svg></button>
+        <button id="btnMic" title="Voice note (coming soon)"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
+      </div>
+    </div>
+    <button class="send-btn" id="btnSend"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff"><path d="M4 12l16-8-6 16-3-7z"/></svg></button>
+  </div>
+
+  <!-- HISTORY OVERLAY -->
+  <div class="history" id="history">
+    <header>
+      <div class="hd-icon">
+        <svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--accent)"><path d="M4 6h10M4 12h10M4 18h7"/><path d="M18 7l2 2 3-3"/></svg>
+      </div>
+      <div class="hd-title">
+        <h1>ManoList</h1>
+      </div>
+      <button class="hd-btn hd-list" id="btnListH" title="Switch list">
+        <span id="listNumH">1</span>
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <button class="hd-btn" id="btnHistoryH" title="Toggle view"></button>
+      <button class="hd-btn" id="btnExportH" title="Backup / restore">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 7l1.5-2.5A1 1 0 015.4 4h13.2a1 1 0 01.9.5L21 7"/><path d="M4 7h16v11a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M9 12h6"/></svg>
+      </button>
+      <button class="hd-btn" id="btnShareH" title="Share list">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v13"/><path d="M8 7l4-4 4 4"/><path d="M6 12H5a2 2 0 00-2 2v5a2 2 0 002 2h14a2 2 0 002-2v-5a2 2 0 00-2-2h-1"/></svg>
+      </button>
+    </header>
+    <div class="hist-scroll" id="histScroll"></div>
+    <!-- Note to Self composer on the history page -->
+    <div class="composer">
+      <button class="comp-btn" id="btnPlusH" title="Attach (coming soon)">
+        <svg class="icon" viewBox="0 0 24 24" style="width:26px;height:26px"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      </button>
+      <div class="comp-field">
+        <textarea id="histInput" rows="1" placeholder="Note to Self" enterkeyhint="done"></textarea>
+        <div class="comp-icons">
+          <button id="btnCameraH" title="Camera (coming soon)"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="12.5" r="3.2"/></svg></button>
+          <button id="btnMicH" title="Voice note (coming soon)"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
+        </div>
+      </div>
+      <button class="send-btn" id="btnSendH"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff"><path d="M4 12l16-8-6 16-3-7z"/></svg></button>
+    </div>
+  </div>
+
+  <!-- CONTEXT POPUP -->
+  <div class="popup-mask" id="popupMask">
+    <div class="popup" id="popup"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<input type="file" id="importFile" accept="application/json,.json" style="display:none">
+
+<script>
+"use strict";
+/* ════════════════════ STORE (v2: 9 independent lists, 1–9) ════════════════════ */
+const KEY = "manolist";   // localStorage namespace; data is always v2
+const LIST_MIN = 1, LIST_MAX = 9;
+function blankList() { return { activeColor: null, activeImportant: false, tiles: [], favourites: [], history: [] }; }
+function freshRoot() { return { version: 2, activeList: LIST_MIN, lists: { "1": blankList() }, settings: {} }; }
+function cleanList(L) {
+  return {
+    activeColor: L.activeColor ?? null, activeImportant: !!L.activeImportant,
+    tiles: Array.isArray(L.tiles) ? L.tiles : [],
+    favourites: Array.isArray(L.favourites) ? L.favourites : [],
+    history: Array.isArray(L.history) ? L.history : []
+  };
+}
+
+/* validate & sanitise a v2 root (lists 1–9); anything else starts fresh */
+function normalize(obj) {
+  if (!(obj && obj.lists && typeof obj.lists === "object")) return freshRoot();
+  const out = { version: 2, activeList: LIST_MIN, lists: {}, settings: obj.settings || {} };
+  for (let i = LIST_MIN; i <= LIST_MAX; i++) {
+    const L = obj.lists[String(i)] || obj.lists[i];
+    if (L) out.lists[String(i)] = cleanList(L);
+  }
+  if (!out.lists["1"]) out.lists["1"] = blankList();
+  let a = parseInt(obj.activeList, 10);
+  if (!(a >= LIST_MIN && a <= LIST_MAX)) a = LIST_MIN;
+  out.activeList = a;
+  return out;
+}
+
+const store = {
+  load() {
+    try { const raw = localStorage.getItem(KEY); if (raw) return normalize(JSON.parse(raw)); } catch (e) {}
+    return freshRoot();
+  },
+  _t: null,
+  save() { clearTimeout(this._t); this._t = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(root)); } catch (e) {} }, 120); },
+  saveNow() { clearTimeout(this._t); try { localStorage.setItem(KEY, JSON.stringify(root)); } catch (e) {} }
+};
+
+/* feature flags — flip to true once wrapped in Capacitor */
+const capabilities = { hasCamera: false, hasMic: false, hasHaptics: false };
+
+let root = store.load();
+function ensureList(n) { const k = String(n); if (!root.lists[k]) root.lists[k] = blankList(); return root.lists[k]; }
+let state = ensureList(root.activeList);   // `state` = the active list; downstream code unchanged
+const selected = new Set();   // selected tile ids (live, not persisted)
+
+/* ════════════════════ HELPERS ════════════════════ */
+const $ = (id) => document.getElementById(id);
+const COLORS = ["blue", "green", "purple", "yellow"];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1600);
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  let h = d.getHours(), m = d.getMinutes();
+  return (h < 10 ? "0" + h : h) + ":" + (m < 10 ? "0" + m : m);
+}
+function dateLabel(ts) {
+  const d = new Date(ts), now = new Date();
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  const wd = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+  const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+  return wd + ", " + d.getDate() + " " + mo;
+}
+
+/* ════════════════════ GESTURES ════════════════════ */
+/* Attaches tap / dblTap / swipeLeft / swipeRight / longPress to an element. */
+function gestures(el, h) {
+  let sx = 0, sy = 0, st = 0, moved = false, lpTimer = null, lpFired = false;
+  let lastTap = 0, tapTimer = null;
+
+  const down = (e) => {
+    const p = e.touches ? e.touches[0] : e;
+    sx = p.clientX; sy = p.clientY; st = Date.now(); moved = false; lpFired = false;
+    if (h.longPress) { lpTimer = setTimeout(() => { lpFired = true; h.longPress(e); }, 480); }
+  };
+  const move = (e) => {
+    const p = e.touches ? e.touches[0] : e;
+    if (Math.abs(p.clientX - sx) > 8 || Math.abs(p.clientY - sy) > 8) { moved = true; clearTimeout(lpTimer); }
+  };
+  const up = (e) => {
+    clearTimeout(lpTimer);
+    if (lpFired) return;
+    const p = e.changedTouches ? e.changedTouches[0] : e;
+    const dx = p.clientX - sx, dy = p.clientY - sy;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      if (dx < 0 && h.swipeLeft) h.swipeLeft(e);
+      else if (dx > 0 && h.swipeRight) h.swipeRight(e);
+      return;
+    }
+    if (moved) return;
+    const now = Date.now();
+    if (now - lastTap < 290) {
+      clearTimeout(tapTimer); lastTap = 0;
+      if (h.dblTap) h.dblTap(e);
+    } else {
+      lastTap = now;
+      tapTimer = setTimeout(() => { lastTap = 0; if (h.tap) h.tap(e); }, h.dblTap ? 290 : 0);
+    }
+  };
+
+  el.addEventListener("touchstart", down, { passive: true });
+  el.addEventListener("touchmove", move, { passive: true });
+  el.addEventListener("touchend", up);
+  // mouse fallback for desktop testing
+  el.addEventListener("mousedown", down);
+  el.addEventListener("mousemove", move);
+  el.addEventListener("mouseup", up);
+}
+
+/* ════════════════════ TILE: DRAG-REORDER + TAP/SWIPE + INLINE EDIT ════════════════════ */
+/* Long-press lifts a tile; move = reorder, release-in-place = context menu.
+   Quick tap = select, double-tap = done, horizontal swipe = pin/delete. */
+let drag = null;
+let tLastTapId = null, tLastTapTime = 0, tTapTimer = null;
+const pt = (e) => { const p = e.touches && e.touches[0] ? e.touches[0] : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : e); return { x: p.clientX, y: p.clientY }; };
+
+function attachTile(el, t) {
+  const start = (e) => {
+    if (e.type === "mousedown" && e.button !== 0) return;
+    if (e.target.classList && e.target.classList.contains("tile-edit")) return;
+    if ($("popupMask").classList.contains("open")) return;
+    const p = pt(e);
+    drag = { t, el, sx: p.x, sy: p.y, lx: p.x, ly: p.y, lifted: false, moved: false, panned: false, scrollV: 0, raf: 0, overId: null };
+    drag.liftTimer = setTimeout(lift, 300);
+  };
+  el.addEventListener("touchstart", start, { passive: true });
+  el.addEventListener("mousedown", start);
+}
+
+function lift() {
+  if (!drag || drag.panned) return;
+  drag.lifted = true;
+  const el = drag.el, r = el.getBoundingClientRect();
+  const g = el.cloneNode(true);
+  g.classList.add("tile-ghost"); g.classList.remove("sel");
+  g.style.width = r.width + "px"; g.style.height = r.height + "px";
+  g.style.left = (drag.lx - r.width / 2) + "px"; g.style.top = (drag.ly - r.height / 2) + "px";
+  document.body.appendChild(g);
+  drag.ghost = g;
+  el.classList.add("lifted");
+  drag.raf = requestAnimationFrame(scrollLoop);
+}
+
+function scrollLoop() {
+  if (!drag || !drag.lifted) return;
+  if (drag.scrollV) { $("tilesScroll").scrollTop += drag.scrollV; updateDropTarget(); }
+  drag.raf = requestAnimationFrame(scrollLoop);
+}
+
+function updateDropTarget() {
+  document.querySelectorAll(".tile.drop-target").forEach(x => x.classList.remove("drop-target"));
+  const under = document.elementFromPoint(drag.lx, drag.ly);
+  const tile = under && under.closest ? under.closest(".tile") : null;
+  if (tile && tile !== drag.el) { tile.classList.add("drop-target"); drag.overId = tile.dataset.id; }
+  else drag.overId = null;
+}
+
+function onMove(e) {
+  if (!drag) return;
+  const p = pt(e);
+  if (!drag.lifted) {
+    if (Math.abs(p.x - drag.sx) > 8 || Math.abs(p.y - drag.sy) > 8) { clearTimeout(drag.liftTimer); drag.panned = true; }
+    return;
+  }
+  e.preventDefault();
+  drag.lx = p.x; drag.ly = p.y;
+  if (Math.abs(p.x - drag.sx) > 10 || Math.abs(p.y - drag.sy) > 10) drag.moved = true;
+  const g = drag.ghost;
+  g.style.left = (p.x - g.offsetWidth / 2) + "px";
+  g.style.top = (p.y - g.offsetHeight / 2) + "px";
+  const r = $("tilesScroll").getBoundingClientRect();
+  if (p.y < r.top + 50) drag.scrollV = -Math.max(5, (r.top + 50 - p.y) / 3);
+  else if (p.y > r.bottom - 50) drag.scrollV = Math.max(5, (p.y - (r.bottom - 50)) / 3);
+  else drag.scrollV = 0;
+  updateDropTarget();
+}
+
+function onEnd(e) {
+  if (!drag) return;
+  clearTimeout(drag.liftTimer);
+  const d = drag;
+  if (d.lifted) {
+    cancelAnimationFrame(d.raf);
+    if (d.ghost) d.ghost.remove();
+    d.el.classList.remove("lifted");
+    document.querySelectorAll(".tile.drop-target").forEach(x => x.classList.remove("drop-target"));
+    if (d.moved) {
+      const from = state.tiles.findIndex(x => x.id === d.t.id);
+      const to = d.overId ? state.tiles.findIndex(x => x.id === d.overId) : state.tiles.length - 1;
+      if (from > -1 && to > -1 && from !== to) {
+        const [it] = state.tiles.splice(from, 1);
+        state.tiles.splice(to, 0, it);
+        store.save();
+      }
+      drag = null; renderTiles(); return;
+    }
+    drag = null; openTilePopup(d.t, d.el); return;   // released in place -> menu
+  }
+  const p = pt(e); const dx = p.x - d.sx, dy = p.y - d.sy;
+  drag = null;
+  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+    if (dx < 0) { d.el.classList.add("swipe-del"); setTimeout(() => deleteTile(d.t.id), 200); }
+    else { d.el.classList.add("swipe-pin"); pinItem(d.t.text); setTimeout(renderTiles, 200); }
+    return;
+  }
+  if (d.panned) return;   // it was a scroll
+  const now = Date.now();
+  if (tLastTapId === d.t.id && now - tLastTapTime < 300) {
+    clearTimeout(tTapTimer); tLastTapId = null;
+    d.t.done = !d.t.done; store.save(); renderTiles();
+  } else {
+    tLastTapId = d.t.id; tLastTapTime = now;
+    tTapTimer = setTimeout(() => {
+      tLastTapId = null;
+      if (selected.has(d.t.id)) selected.delete(d.t.id); else selected.add(d.t.id);
+      renderTiles();
+    }, 300);
+  }
+}
+document.addEventListener("touchmove", onMove, { passive: false });
+document.addEventListener("mousemove", onMove);
+document.addEventListener("touchend", onEnd);
+document.addEventListener("mouseup", onEnd);
+
+function startEditById(id) {
+  const t = state.tiles.find(x => x.id === id); if (!t) return;
+  const el = document.querySelector('.tile[data-id="' + id + '"]'); if (!el) return;
+  el.innerHTML = "";
+  const inp = document.createElement("input");
+  inp.className = "tile-edit"; inp.value = t.text; inp.setAttribute("enterkeyhint", "done");
+  el.appendChild(inp); inp.focus(); inp.select();
+  let closed = false;
+  const commit = (save) => {
+    if (closed) return; closed = true;
+    if (save) {
+      const v = inp.value.trim();
+      if (v && v.toLowerCase() !== t.text.toLowerCase()) {
+        if (state.tiles.some(x => x.id !== t.id && x.text.toLowerCase() === v.toLowerCase())) toast("Already on the list");
+        else t.text = v;
+      } else if (v) { t.text = v; }
+    }
+    store.save(); renderTiles();
+  };
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(true); }
+    else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+  });
+  inp.addEventListener("blur", () => commit(true));
+}
+
+/* ════════════════════ ACTIONS ════════════════════ */
+function addItems(raw) {
+  const parts = raw.split(",").map(s => s.trim()).filter(Boolean);
+  if (!parts.length) return;
+  const ts = Date.now();
+  const seen = new Set(state.tiles.map(t => t.text.toLowerCase()));
+  let added = 0, skipped = 0;
+  parts.forEach((text, i) => {
+    const key = text.toLowerCase();
+    if (seen.has(key)) { skipped++; return; }   // dedupe: an item exists only once
+    seen.add(key);
+    const id = uid();
+    state.tiles.push({ id, text, color: state.activeColor, important: state.activeImportant, done: false, createdAt: ts + i });
+    state.history.push({ id: uid(), text, ts: ts + i, hi: state.activeImportant });
+    added++;
+  });
+  store.save();
+  renderTiles(); renderPeek();
+  if (skipped) toast(added ? added + " added · " + skipped + " already listed" : "Already on the list");
+}
+
+function isPinned(text) {
+  return state.favourites.some(f => f.text.toLowerCase() === text.toLowerCase());
+}
+function pinItem(text) {
+  if (isPinned(text)) { toast("Already pinned"); return; }
+  state.favourites.push({ id: uid(), text });
+  store.save(); renderFav(); toast("Pinned");
+}
+function unpinItem(text) {
+  const key = text.toLowerCase();
+  state.favourites = state.favourites.filter(f => f.text.toLowerCase() !== key);
+  store.save(); renderFav(); toast("Unpinned");
+}
+
+function deleteTile(id) {
+  state.tiles = state.tiles.filter(t => t.id !== id);
+  selected.delete(id);
+  store.save(); renderTiles();
+}
+
+function applyColorToSelected(color) {
+  state.tiles.forEach(t => { if (selected.has(t.id)) t.color = color; });
+  selected.clear();
+  store.save(); renderTiles(); renderRail();
+}
+
+function selectByColor(color) {
+  selected.clear();
+  state.tiles.forEach(t => { if ((t.color || null) === color) selected.add(t.id); });
+  renderTiles();
+  toast(selected.size ? selected.size + " selected" : "None with that colour");
+}
+
+/* ════════════════════ RENDER ════════════════════ */
+function fitText(tile) {
+  const inner = tile.querySelector(".tile-text");
+  let size = 15.5; inner.style.fontSize = size + "px";
+  let guard = 0;
+  while (guard++ < 40 && (inner.scrollHeight > tile.clientHeight - 10 || inner.scrollWidth > tile.clientWidth - 8) && size > 8.5) {
+    size -= 0.5; inner.style.fontSize = size + "px";
+  }
+}
+
+let firstTiles = true, firstFav = true;   // first render of each rests at the bottom (newest)
+function renderTiles() {
+  const sc = $("tilesScroll");
+  const prev = sc.scrollTop;
+  const wasBottom = sc.scrollHeight - prev - sc.clientHeight < 40;
+  const c = $("tiles"); c.innerHTML = "";
+  $("tilesEmpty").style.display = state.tiles.length ? "none" : "block";
+  state.tiles.forEach(t => {
+    const el = document.createElement("div");
+    el.className = "tile" + (t.done ? " done" : "") + (t.important ? " important" : "") + (selected.has(t.id) ? " sel" : "");
+    if (t.color) el.dataset.c = t.color;
+    el.dataset.id = t.id;
+    const span = document.createElement("div");
+    span.className = "tile-text"; span.textContent = t.text;
+    el.appendChild(span);
+    c.appendChild(el);
+    fitText(el);
+    attachTile(el, t);
+  });
+  sc.scrollTop = (firstTiles || wasBottom) ? sc.scrollHeight : prev;   // stick to newest unless scrolled up
+  firstTiles = false;
+}
+
+function renderRail() {
+  document.querySelectorAll(".swatch").forEach(s => {
+    if (s.dataset.c === "outline") { s.classList.toggle("active", !!state.activeImportant && selected.size === 0); return; }
+    const key = s.dataset.c === "clear" ? null : s.dataset.c;
+    s.classList.toggle("active", state.activeColor === key && selected.size === 0);
+  });
+}
+
+function renderFav() {
+  const row = $("favRow"), box = $("favChips");
+  // collapse the whole pinned strip when empty; let the history peek take the space
+  if (!state.favourites.length) {
+    $("fav").style.display = "none";
+    $("peek").classList.add("peek-tall");
+    box.innerHTML = "";
+    return;
+  }
+  $("fav").style.display = "";
+  $("peek").classList.remove("peek-tall");
+  const prev = row.scrollTop;
+  const wasBottom = row.scrollHeight - prev - row.clientHeight < 40;
+  box.innerHTML = "";
+  state.favourites.forEach(f => {
+    const chip = document.createElement("div");
+    chip.className = "fav-chip"; chip.textContent = f.text;
+    box.appendChild(chip);
+    gestures(chip, {
+      tap: () => { addItems(f.text); toast("Added"); },
+      longPress: () => openFavPopup(f)
+    });
+  });
+  row.scrollTop = (firstFav || wasBottom) ? row.scrollHeight : prev;   // stick to newest unless scrolled up
+  firstFav = false;
+}
+
+function renderPeek() {
+  const c = $("peekScroll"); c.innerHTML = "";
+  const recent = state.history.slice(-30);
+  recent.forEach(h => {
+    const line = document.createElement("div");
+    line.className = "peek-line";
+    line.innerHTML = '<b></b><time></time>';
+    line.querySelector("b").textContent = h.text;
+    line.querySelector("time").textContent = fmtTime(h.ts);
+    c.appendChild(line);
+  });
+  c.scrollTop = c.scrollHeight;
+}
+
+function renderHistory() {
+  const c = $("histScroll"); c.innerHTML = "";
+  if (!state.history.length) { c.innerHTML = '<div class="hist-empty">Nothing yet.<br>Items you add will appear here, newest at the bottom.</div>'; return; }
+  let lastLabel = null;
+  state.history.forEach(h => {
+    const label = dateLabel(h.ts);
+    if (label !== lastLabel) {
+      lastLabel = label;
+      const sep = document.createElement("div");
+      sep.className = "date-sep"; sep.innerHTML = "<span></span>";
+      sep.querySelector("span").textContent = label;
+      c.appendChild(sep);
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "bubble-wrap";
+    const b = document.createElement("div");
+    b.className = "bubble" + (isHighlighted(h) ? " hi" : ""); b.dataset.id = h.id;
+    b.innerHTML = '<span></span><time></time>';
+    b.querySelector("span").textContent = h.text;
+    b.querySelector("time").textContent = fmtTime(h.ts);
+    wrap.appendChild(b); c.appendChild(wrap);
+    gestures(b, {
+      dblTap: () => openHistoryPopup(h, b),
+      longPress: () => openHistoryPopup(h, b),
+      swipeLeft: () => deleteHistory(h.id),
+      swipeRight: () => { if (isPinned(h.text)) toast("Already pinned"); else pinItem(h.text); }
+    });
+  });
+  c.scrollTop = c.scrollHeight;
+}
+
+function renderAll() { renderTiles(); renderRail(); renderFav(); renderPeek(); }
+
+/* ════════════════════ LISTS (1–9) ════════════════════ */
+function updateListButton() {
+  const el = $("listNum"); if (el) el.textContent = root.activeList;
+  const elH = $("listNumH"); if (elH) elH.textContent = root.activeList;
+}
+
+function switchList(n) {
+  hidePopup();
+  if (n === root.activeList) return;
+  root.activeList = n;
+  state = ensureList(n);
+  selected.clear();
+  firstTiles = true; firstFav = true;   // new list rests at the bottom (newest)
+  store.save();
+  renderAll(); updateListButton();
+}
+
+function openListMenu(anchor) {
+  const pop = $("popup");
+  pop.innerHTML = '<div class="list-grid-title">Lists</div>';
+  const grid = document.createElement("div");
+  grid.className = "list-grid";
+  for (let n = LIST_MIN; n <= LIST_MAX; n++) {
+    const cell = document.createElement("button");
+    cell.className = "list-cell" + (n === root.activeList ? " cur" : "");
+    cell.textContent = n;
+    const L = root.lists[String(n)];
+    const cnt = L && L.tiles ? L.tiles.length : 0;
+    if (cnt) { const b = document.createElement("span"); b.className = "cnt"; b.textContent = cnt > 99 ? "99+" : cnt; cell.appendChild(b); }
+    cell.onclick = () => switchList(n);
+    grid.appendChild(cell);
+  }
+  pop.appendChild(grid);
+  placePopup((anchor && anchor.nodeType) ? anchor : ($("history").classList.contains("open") ? $("btnListH") : $("btnList")));
+}
+$("btnList").addEventListener("click", () => openListMenu($("btnList")));
+
+/* ════════════════════ POPUP ════════════════════ */
+function placePopup(anchorEl) {
+  const mask = $("popupMask"), pop = $("popup");
+  mask.classList.add("open");
+  const r = anchorEl.getBoundingClientRect();
+  const appR = $("app").getBoundingClientRect();
+  pop.style.visibility = "hidden"; pop.style.left = "0px"; pop.style.top = "0px";
+  requestAnimationFrame(() => {
+    const pr = pop.getBoundingClientRect();
+    let left = r.left - appR.left + r.width / 2 - pr.width / 2;
+    left = Math.max(8, Math.min(left, appR.width - pr.width - 8));
+    let top = r.bottom - appR.top + 6;
+    if (top + pr.height > appR.height - 8) top = r.top - appR.top - pr.height - 6;
+    pop.style.left = left + "px"; pop.style.top = top + "px"; pop.style.visibility = "visible";
+  });
+}
+function showPopup(anchorEl, buttons) {
+  const pop = $("popup");
+  pop.innerHTML = "";
+  buttons.forEach(bt => {
+    const b = document.createElement("button");
+    if (bt.danger) b.className = "danger";
+    b.innerHTML = bt.icon + "<span>" + bt.label + "</span>";
+    b.onclick = () => { hidePopup(); bt.action(); };
+    pop.appendChild(b);
+  });
+  placePopup(anchorEl);
+}
+function hidePopup() { $("popupMask").classList.remove("open"); }
+$("popupMask").addEventListener("click", (e) => { if (e.target === $("popupMask")) hidePopup(); });
+
+const ICO_PIN = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M9 3h6l-1 6 3 3v2h-5v6l-1 1-1-1v-6H4v-2l3-3z"/></svg>';
+const ICO_DEL = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M5 7h14M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>';
+const ICO_CHK = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M5 12l4 4 10-10"/></svg>';
+const ICO_EDIT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>';
+
+/* highlight is shared between a history entry and its matching list tile (linked by text) */
+function isHighlighted(h) {
+  if (h.hi) return true;
+  const key = h.text.toLowerCase();
+  const t = state.tiles.find(x => x.text.toLowerCase() === key);
+  return !!(t && t.important);
+}
+function setHighlight(text, on) {
+  const key = text.toLowerCase();
+  state.history.forEach(h => { if (h.text.toLowerCase() === key) h.hi = on; });
+  state.tiles.forEach(t => { if (t.text.toLowerCase() === key) t.important = on; });
+}
+/* keep history highlights in sync after the list's important flags change on the main screen */
+function syncHistoryHighlights() {
+  state.history.forEach(h => {
+    const t = state.tiles.find(x => x.text.toLowerCase() === h.text.toLowerCase());
+    if (t) h.hi = !!t.important;
+  });
+}
+const ICO_HILITE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px;color:#ff2d9b"><circle cx="12" cy="12" r="8" fill="none" stroke="#ff2d9b" stroke-width="2.4"/></svg>';
+
+function openHistoryPopup(h, el) {
+  const on = isHighlighted(h);
+  showPopup(el, [
+    { label: "Edit", icon: ICO_EDIT, action: () => startEditHistory(h) },
+    { label: on ? "Remove highlight" : "Highlight", icon: ICO_HILITE, action: () => {
+        setHighlight(h.text, !on); store.save(); renderHistory(); renderTiles(); renderPeek();
+    } },
+    isPinned(h.text)
+      ? { label: "Unpin", icon: ICO_PIN, action: () => unpinItem(h.text) }
+      : { label: "Pin", icon: ICO_PIN, action: () => pinItem(h.text) },
+    { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteHistory(h.id) }
+  ]);
+}
+function deleteHistory(id) {
+  state.history = state.history.filter(x => x.id !== id);
+  store.save(); renderHistory(); renderPeek(); toast("Removed from history");
+}
+
+function startEditHistory(h) {
+  const b = document.querySelector('.bubble[data-id="' + h.id + '"]'); if (!b) return;
+  const span = b.querySelector("span"); if (!span) return;
+  const inp = document.createElement("input");
+  inp.className = "bubble-edit"; inp.value = h.text; inp.setAttribute("enterkeyhint", "done");
+  span.replaceWith(inp); inp.focus(); inp.select();
+  let closed = false;
+  const commit = (save) => {
+    if (closed) return; closed = true;
+    if (save) { const v = inp.value.trim(); if (v) h.text = v; }
+    store.save(); renderHistory(); renderPeek();
+  };
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(true); }
+    else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+  });
+  inp.addEventListener("blur", () => commit(true));
+}
+function openTilePopup(t, el) {
+  showPopup(el, [
+    { label: "Edit", icon: ICO_EDIT, action: () => startEditById(t.id) },
+    { label: t.done ? "Mark active" : "Mark done", icon: ICO_CHK, action: () => { t.done = !t.done; store.save(); renderTiles(); } },
+    { label: "Pin", icon: ICO_PIN, action: () => pinItem(t.text) },
+    { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteTile(t.id) }
+  ]);
+}
+function openFavPopup(f) {
+  const chip = [...document.querySelectorAll(".fav-chip")].find(c => c.textContent === f.text) || $("favRow");
+  showPopup(chip, [
+    { label: "Add to list", icon: ICO_CHK, action: () => { addItems(f.text); toast("Added"); } },
+    { label: "Unpin", icon: ICO_DEL, danger: true, action: () => {
+        state.favourites = state.favourites.filter(x => x.id !== f.id); store.save(); renderFav(); toast("Unpinned");
+    } }
+  ]);
+}
+
+/* ════════════════════ SWATCH RAIL ════════════════════ */
+function toggleImportantSelected() {
+  const ids = [...selected];
+  const allImp = ids.every(id => { const t = state.tiles.find(x => x.id === id); return t && t.important; });
+  ids.forEach(id => { const t = state.tiles.find(x => x.id === id); if (t) t.important = !allImp; });
+  syncHistoryHighlights();
+  selected.clear(); store.save(); renderTiles(); renderRail();
+}
+function selectImportant() {
+  selected.clear();
+  state.tiles.forEach(t => { if (t.important) selected.add(t.id); });
+  renderTiles();
+  toast(selected.size ? selected.size + " flagged" : "None flagged");
+}
+
+document.querySelectorAll(".swatch").forEach(s => {
+  if (s.dataset.c === "outline") {
+    gestures(s, {
+      tap: () => {
+        if (selected.size > 0) { toggleImportantSelected(); }
+        else { state.activeImportant = !state.activeImportant; store.save(); renderRail(); toast(state.activeImportant ? "Flagging new items" : "Flag off"); }
+      },
+      dblTap: () => selectImportant()
+    });
+    return;
+  }
+  const key = s.dataset.c === "clear" ? null : s.dataset.c;
+  gestures(s, {
+    tap: () => {
+      if (selected.size > 0) { applyColorToSelected(key); toast(key ? "Coloured" : "Cleared"); }
+      else { state.activeColor = (state.activeColor === key) ? null : key; store.save(); renderRail(); toast(key ? "Painting " + key : "Paint off"); }
+    },
+    dblTap: () => selectByColor(key)
+  });
+});
+
+/* ════════════════════ COMPOSER ════════════════════ */
+const input = $("input");
+function autoGrow() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px"; }
+function updateSend() { $("btnSend").classList.toggle("show", input.value.trim().length > 0); }
+input.addEventListener("input", () => { autoGrow(); updateSend(); });
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(); }
+});
+function commit() {
+  const v = input.value;
+  if (!v.trim()) return;
+  addItems(v);
+  input.value = ""; autoGrow(); updateSend();
+}
+$("btnSend").addEventListener("click", commit);
+
+/* history-page composer (same behaviour; also refreshes the history list) */
+const histInput = $("histInput");
+function autoGrowH() { histInput.style.height = "auto"; histInput.style.height = Math.min(histInput.scrollHeight, 120) + "px"; }
+function updateSendH() { $("btnSendH").classList.toggle("show", histInput.value.trim().length > 0); }
+histInput.addEventListener("input", () => { autoGrowH(); updateSendH(); });
+histInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitHist(); }
+});
+function commitHist() {
+  const v = histInput.value;
+  if (!v.trim()) return;
+  addItems(v);
+  histInput.value = ""; autoGrowH(); updateSendH();
+  renderHistory();   // new entries appear in the bubble stream immediately
+}
+$("btnSendH").addEventListener("click", commitHist);
+
+/* placeholder buttons */
+["btnPlus","btnCamera","btnMic","btnPlusH","btnCameraH","btnMicH"].forEach(id => $(id).addEventListener("click", () => toast("Coming soon")));
+
+/* ════════════════════ NAV ════════════════════ */
+/* filled blue circle + white check = history view active */
+const ICO_VIEW_HIST = '<svg class="icon" viewBox="0 0 24 24" style="width:21px;height:21px"><circle cx="12" cy="12" r="9" fill="var(--accent)" stroke="var(--accent)"/><path d="M8 12.2l2.6 2.6L16 9.3" stroke="#fff" stroke-width="2.2"/></svg>';
+/* outline blue circle + blue check = main view active */
+const ICO_VIEW_MAIN = '<svg class="icon" viewBox="0 0 24 24" style="width:21px;height:21px"><circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)"/><path d="M8 12.2l2.6 2.6L16 9.3" stroke="var(--accent)" stroke-width="2.2"/></svg>';
+function setView(mode) {
+  const isHist = mode === "history";
+  if (isHist) { renderHistory(); $("history").classList.add("open"); }
+  else { $("history").classList.remove("open"); }
+  /* main-page toggle reflects the *other* mode it switches to; history-page toggle the same */
+  $("btnHistory").innerHTML = isHist ? ICO_VIEW_HIST : ICO_VIEW_MAIN;
+  $("btnHistoryH").innerHTML = isHist ? ICO_VIEW_HIST : ICO_VIEW_MAIN;
+  root.settings.view = isHist ? "history" : "main";   // remember across launches
+  store.save();
+}
+function toggleView() { setView($("history").classList.contains("open") ? "main" : "history"); }
+$("btnHistory").addEventListener("click", toggleView);
+$("btnHistoryH").addEventListener("click", toggleView);
+/* history-page header buttons mirror the main header */
+$("btnListH").addEventListener("click", () => openListMenu($("btnListH")));
+$("btnShareH").addEventListener("click", shareList);
+/* double-tap blank peek area -> open history */
+gestures($("peek"), { dblTap: () => setView("history") });
+setView(root.settings && root.settings.view === "history" ? "history" : "main");
+
+/* ════════════════════ SHARE LIST (plain text → iOS share sheet) ════════════════════ */
+async function shareList() {
+  const text = state.tiles.filter(t => !t.done).map(t => t.text).join(", ");
+  if (!text) { toast("Nothing to share"); return; }
+  if (navigator.share) {
+    try { await navigator.share({ title: "ManoList", text }); return; }
+    catch (e) { if (e && e.name === "AbortError") return; /* else fall through */ }
+  }
+  try { await navigator.clipboard.writeText(text); toast("List copied"); }
+  catch (e) { toast(text.length > 40 ? text.slice(0, 40) + "…" : text); }
+}
+$("btnShare").addEventListener("click", shareList);
+
+/* ════════════════════ BACKUP ════════════════════ */
+const ICO_EXPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 3v12m0-12l-4 4m4-4l4 4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
+const ICO_IMPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 15V3m0 12l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
+
+async function exportBackup() {
+  store.saveNow();
+  const data = JSON.stringify(root, null, 2);   // all lists in one file
+  const fname = "manolist.json";
+  const blob = new Blob([data], { type: "application/json" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "application/json" })] })) {
+      await navigator.share({ files: [new File([blob], fname, { type: "application/json" })], title: "ManoList backup" });
+      return;
+    }
+  } catch (e) { /* fall through to download */ }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast("Backup saved");
+}
+
+/* tapping the backup button offers both Export and Import */
+function openBackupMenu(anchor) {
+  showPopup(anchor, [
+    { label: "Export backup", icon: ICO_EXPORT, action: exportBackup },
+    { label: "Import backup", icon: ICO_IMPORT, action: () => $("importFile").click() }
+  ]);
+}
+$("btnExport").addEventListener("click", () => openBackupMenu($("btnExport")));
+$("btnExportH").addEventListener("click", () => openBackupMenu($("btnExportH")));
+$("importFile").addEventListener("change", (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const obj = JSON.parse(r.result);
+      if (!(obj && obj.lists && typeof obj.lists === "object")) throw new Error("bad");
+      root = normalize(obj);                       // restores all lists
+      state = ensureList(root.activeList);
+      selected.clear(); firstTiles = true; firstFav = true;
+      store.saveNow(); renderAll(); updateListButton(); toast("Backup restored");
+    } catch (err) { toast("Invalid backup file"); }
+  };
+  r.readAsText(file);
+  e.target.value = "";
+});
+
+/* ════════════════════ KEYBOARD-AWARE HEIGHT ════════════════════ */
+function syncTileHeight() {
+  const s = document.querySelector('.swatch[data-c="blue"]') || document.querySelector(".swatch");
+  if (!s) return;
+  const h = s.getBoundingClientRect().height;
+  if (h > 0) document.documentElement.style.setProperty("--tile-h", h + "px");
+}
+function syncHeight() {
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  document.documentElement.style.setProperty("--app-h", h + "px");
+  requestAnimationFrame(syncTileHeight);   // swatch height changes with viewport
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncHeight);
+  window.visualViewport.addEventListener("scroll", syncHeight);
+}
+window.addEventListener("resize", syncHeight);
+syncHeight();
+
+/* ════════════════════ PWA MANIFEST (runtime) ════════════════════ */
+(function () {
+  const icon = document.querySelector("link[rel='apple-touch-icon']").href;
+  const manifest = { name: "ManoList", short_name: "ManoList", start_url: ".", display: "standalone",
+    background_color: "#eceef3", theme_color: "#3b5bdb",
+    icons: [{ src: icon, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }] };
+  const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+  const link = document.createElement("link"); link.rel = "manifest"; link.href = URL.createObjectURL(blob);
+  document.head.appendChild(link);
+})();
+
+/* request durable storage opportunistically (best-effort; unreliable on iOS) */
+if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(() => {}); }
+
+/* ════════════════════ INIT ════════════════════ */
+renderAll(); updateListButton();
+</script>
+</body>
+</html>
