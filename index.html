@@ -90,7 +90,7 @@ header {
 .hd-btn:active { background: var(--accent-soft); }
 /* list switcher button: current digit + chevron */
 .hd-list { width: auto; min-width: 40px; padding: 0 8px; gap: 1px; display: inline-flex; align-items: center; justify-content: center; }
-.hd-list span { font-size: 20px; font-weight: 800; line-height: 1; }
+.hd-list span { font-size: 19px; font-weight: 500; line-height: 1; }
 /* 0–9 grid picker inside the popup */
 .list-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; }
 .list-cell {
@@ -161,7 +161,7 @@ header {
 .tile-edit {
   width: 100%; border: none; background: rgba(255,255,255,.85); border-radius: 8px;
   text-align: center; font-family: var(--font); font-size: calc(15px * var(--fs)); padding: 5px 4px;
-  outline: 2px solid var(--accent); color: var(--text);
+  outline: 2px solid var(--accent); color: var(--text); caret-color: var(--accent);
 }
 
 /* swatch rail */
@@ -191,17 +191,18 @@ header {
 .swatch[data-c="outline"] { background: #fff; box-shadow: inset 0 0 0 3px #ff2d9b, inset 0 0 9px 2px rgba(255,45,155,.65); }
 
 /* ══════════════ FAVOURITES ══════════════ */
+/* single row: inline toggle (chevron) at left + chips; tap the toggle to expand */
 .fav {
   flex: 0 0 auto; background: var(--header); border-top: 1px solid var(--line);
   padding: 8px 10px; padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
+  display: flex; align-items: flex-end; gap: 6px;
 }
-/* reserves ~3 rows then scrolls vertically; chips bottom-align (newest at bottom) */
-/* collapsed (1 row) by default; the star label toggles .fav-open to expand */
-.fav-row { display: flex; flex-direction: column; height: 40px; overflow-y: auto; -webkit-overflow-scrolling: touch; transition: height .2s ease; }
+/* collapsed (1 row) by default; the inline toggle flips .fav-open to expand */
+.fav-row { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; height: 34px; overflow-y: auto; -webkit-overflow-scrolling: touch; transition: height .2s ease; }
 .fav.fav-open .fav-row { height: 112px; }
 .fav-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; margin-top: auto; }
-.fav-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); margin-bottom: 5px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; padding: 2px 0; }
-.fav-label:active { opacity: .6; }
+.fav-toggle { flex: 0 0 auto; height: 34px; display: flex; align-items: center; gap: 3px; background: none; border: none; padding: 0 2px; color: var(--text-dim); cursor: pointer; user-select: none; -webkit-user-select: none; }
+.fav-toggle:active { opacity: .55; }
 .fav-chev { transition: transform .2s ease; }
 .fav.fav-open .fav-chev { transform: rotate(180deg); }
 .fav-chip {
@@ -221,7 +222,7 @@ header {
   transition: height .2s ease;
 }
 /* the peek grows to absorb the space freed by the pinned strip, so the tile board stays a constant size */
-.peek.peek-mid  { height: 188px; }   /* pinned strip present but collapsed (1 row): +72px ≈ the fav-row shrink */
+.peek.peek-mid  { height: 194px; }   /* pinned strip present but collapsed (1 row): +78px ≈ the fav-row shrink */
 .peek.peek-tall { height: 260px; }   /* pinned strip hidden entirely (no pins) */
 .peek-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .peek-scroll > :first-child { margin-top: auto; }   /* keep newest pinned to the bottom while staying scrollable upward */
@@ -277,7 +278,10 @@ header {
 /* highlight flag — same bright-pink highlighter as the main-screen tiles */
 .bubble.hi { box-shadow: 0 0 0 2px #ff2d9b, 0 0 14px 5px rgba(255,45,155,.6); }
 .bubble time { font-size: calc(12.5px * var(--fs)); color: rgba(255,255,255,.85); flex: 0 0 auto; }
-.bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: none; background: rgba(255,255,255,.22); color: #fff; font-family: var(--font); font-size: calc(16.5px * var(--fs)); border-radius: 8px; padding: 3px 7px; }
+/* edit field reads as a standard iOS text field: white box, dark text, visible blue caret + focus ring */
+.bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: 2px solid #fff; outline-offset: 0; background: #fff; color: var(--text); caret-color: var(--accent); font-family: var(--font); font-size: calc(16.5px * var(--fs)); border-radius: 8px; padding: 4px 8px; }
+.bubble-edit::selection { background: var(--accent-soft); color: var(--text); }
+.tile-edit::selection { background: var(--accent-soft); color: var(--text); }
 .hist-empty { color: var(--text-mute); text-align: center; padding: 60px 20px; line-height: 1.5; }
 
 /* context popup */
@@ -348,10 +352,10 @@ header {
 
   <!-- FAVOURITES -->
   <div class="fav" id="fav">
-    <div class="fav-label" id="favToggle" title="Pinned · tap to expand / collapse">
+    <button class="fav-toggle" id="favToggle" title="Pinned · tap to expand / collapse">
       <svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 17.3l-6 3.7 1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.6 4.9L18 21z"/></svg>
       <svg class="icon fav-chev" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M6 9l6 6 6-6"/></svg>
-    </div>
+    </button>
     <div class="fav-row" id="favRow"><div class="fav-chips" id="favChips"></div></div>
   </div>
 
@@ -708,7 +712,7 @@ function startEditById(id) {
   const el = document.querySelector('.tile[data-id="' + id + '"]'); if (!el) return;
   el.innerHTML = "";
   const inp = document.createElement("input");
-  inp.className = "tile-edit"; inp.value = t.text; inp.setAttribute("enterkeyhint", "done");
+  inp.className = "tile-edit"; inp.value = t.text + " "; inp.setAttribute("enterkeyhint", "done");   // trailing space ready for an append; commit trims it
   el.appendChild(inp); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
   let closed = false;
   const commit = (save) => {
@@ -1024,7 +1028,7 @@ function startEditHistory(h) {
   const b = document.querySelector('.bubble[data-id="' + h.id + '"]'); if (!b) return;
   const span = b.querySelector("span"); if (!span) return;
   const inp = document.createElement("input");
-  inp.className = "bubble-edit"; inp.value = h.text; inp.setAttribute("enterkeyhint", "done");
+  inp.className = "bubble-edit"; inp.value = h.text + " "; inp.setAttribute("enterkeyhint", "done");   // trailing space ready for an append; commit trims it
   span.replaceWith(inp); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
   let closed = false;
   const commit = (save) => {
