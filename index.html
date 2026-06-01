@@ -17,7 +17,7 @@
 
 :root {
   /* surfaces */
-  --bg:           #eceef3;
+  --bg:           #ffffff;
   --surface:      #ffffff;
   --header:       #f7f8fb;
   --line:         #dfe3ea;
@@ -37,6 +37,7 @@
   --c-yellow: #ffe680;
   --radius:   14px;
   --radius-sm:10px;
+  --fs:       1;     /* user text-size multiplier — toolbar A+ cycles it, persisted */
   --safe-top:    env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --rail-w: 45px;   /* swatch-rail width; doubles as the right gutter so all scrollbars align */
@@ -75,7 +76,7 @@ header {
   flex: 0 0 auto;
 }
 .hd-title { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
-.hd-title h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-title h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .verified { width: 16px; height: 16px; flex: 0 0 auto; }
 .hd-btn {
   flex: 0 0 auto; border: none; background: none; cursor: pointer;
@@ -85,7 +86,7 @@ header {
 .hd-btn:active { background: var(--accent-soft); }
 /* list switcher button: current digit + chevron */
 .hd-list { width: auto; min-width: 40px; padding: 0 8px; gap: 1px; display: inline-flex; align-items: center; justify-content: center; }
-.hd-list #listNum { font-size: 16px; font-weight: 700; line-height: 1; }
+.hd-list span { font-size: 20px; font-weight: 800; line-height: 1; }
 /* 0–9 grid picker inside the popup */
 .list-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; }
 .list-cell {
@@ -142,7 +143,7 @@ header {
 .tile[data-c="purple"] { background: var(--c-purple); border-color: #b197fc; }
 .tile[data-c="yellow"] { background: var(--c-yellow); border-color: #ffd43b; }
 
-.tiles-empty { color: var(--text-mute); font-size: 14px; text-align: center; padding: 30px 16px; line-height: 1.5; }
+.tiles-empty { color: var(--text-mute); font-size: calc(15px * var(--fs)); text-align: center; padding: 30px 16px; line-height: 1.5; }
 
 /* drag-to-reorder + inline edit */
 .tile.lifted { opacity: .28; }
@@ -155,7 +156,7 @@ header {
 }
 .tile-edit {
   width: 100%; border: none; background: rgba(255,255,255,.85); border-radius: 8px;
-  text-align: center; font-family: var(--font); font-size: 14px; padding: 5px 4px;
+  text-align: center; font-family: var(--font); font-size: calc(15px * var(--fs)); padding: 5px 4px;
   outline: 2px solid var(--accent); color: var(--text);
 }
 
@@ -193,14 +194,14 @@ header {
 /* reserves ~3 rows then scrolls vertically; chips bottom-align (newest at bottom) */
 .fav-row { display: flex; flex-direction: column; height: 112px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .fav-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; margin-top: auto; }
-.fav-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-mute); margin-bottom: 5px; display: flex; align-items: center; gap: 5px; }
+.fav-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-mute); margin-bottom: 5px; display: flex; align-items: center; gap: 5px; }
 .fav-chip {
   flex: 0 0 auto; background: var(--chip); border: 1px solid var(--line);
-  border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 500;
+  border-radius: 999px; padding: 7px 13px; font-size: calc(14px * var(--fs)); font-weight: 500;
   white-space: nowrap; cursor: pointer; max-width: 160px; overflow: hidden; text-overflow: ellipsis;
 }
 .fav-chip:active { background: #e2e6ec; transform: scale(.96); }
-.fav-empty { font-size: 12px; color: var(--text-mute); padding: 4px 2px; }
+.fav-empty { font-size: 13px; color: var(--text-mute); padding: 4px 2px; }
 
 /* ══════════════ HISTORY PEEK ══════════════ */
 .peek {
@@ -212,9 +213,9 @@ header {
 .peek.peek-tall { height: 260px; }   /* absorbs the space freed when the pinned strip is hidden */
 .peek-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .peek-scroll > :first-child { margin-top: auto; }   /* keep newest pinned to the bottom while staying scrollable upward */
-.peek-line { font-size: 12.5px; color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
+.peek-line { font-size: calc(16.5px * var(--fs)); color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
 .peek-line b { color: var(--text); font-weight: 500; }
-.peek-line time { margin-left: auto; font-size: 10.5px; color: var(--text-mute); flex: 0 0 auto; }
+.peek-line time { margin-left: auto; font-size: calc(13px * var(--fs)); color: var(--text-dim); flex: 0 0 auto; }
 
 /* ══════════════ COMPOSER ══════════════ */
 .composer {
@@ -227,7 +228,7 @@ header {
 .comp-field { flex: 1 1 auto; display: flex; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 3px 6px 3px 14px; min-height: 38px; }
 .comp-field textarea {
   flex: 1 1 auto; border: none; outline: none; resize: none; background: none;
-  font-family: var(--font); font-size: 16px; line-height: 1.3; color: var(--text);
+  font-family: var(--font); font-size: calc(17px * var(--fs)); line-height: 1.3; color: var(--text);
   max-height: 120px; padding: 8px 0; overflow-y: auto;
 }
 .comp-icons { display: flex; align-items: center; gap: 2px; }
@@ -257,14 +258,14 @@ header {
 .bubble-wrap { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 .bubble {
   background: var(--bubble); color: var(--bubble-text); border-radius: 16px 16px 4px 16px;
-  padding: 9px 13px; max-width: 78%; font-size: 15px; line-height: 1.3;
+  padding: 9px 13px; max-width: 78%; font-size: calc(16.5px * var(--fs)); line-height: 1.3;
   position: relative; cursor: pointer; user-select: none; -webkit-user-select: none;
   display: flex; align-items: flex-end; gap: 8px;
 }
 /* highlight flag — same bright-pink highlighter as the main-screen tiles */
 .bubble.hi { box-shadow: 0 0 0 2px #ff2d9b, 0 0 14px 5px rgba(255,45,155,.6); }
-.bubble time { font-size: 10.5px; color: rgba(255,255,255,.7); flex: 0 0 auto; }
-.bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: none; background: rgba(255,255,255,.22); color: #fff; font-family: var(--font); font-size: 15px; border-radius: 8px; padding: 3px 7px; }
+.bubble time { font-size: calc(12.5px * var(--fs)); color: rgba(255,255,255,.85); flex: 0 0 auto; }
+.bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: none; background: rgba(255,255,255,.22); color: #fff; font-family: var(--font); font-size: calc(16.5px * var(--fs)); border-radius: 8px; padding: 3px 7px; }
 .hist-empty { color: var(--text-mute); text-align: center; padding: 60px 20px; line-height: 1.5; }
 
 /* context popup */
@@ -303,6 +304,9 @@ header {
     <button class="hd-btn hd-list" id="btnList" title="Switch list">
       <span id="listNum">1</span>
       <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <button class="hd-btn" id="btnFont" title="Text size">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="none"><text x="0.5" y="18" font-size="16" font-weight="800">A</text><text x="13" y="13" font-size="12" font-weight="800">+</text></svg>
     </button>
     <button class="hd-btn" id="btnHistory" title="Toggle view"></button>
     <button class="hd-btn" id="btnExport" title="Backup / restore">
@@ -370,6 +374,9 @@ header {
       <button class="hd-btn hd-list" id="btnListH" title="Switch list">
         <span id="listNumH">1</span>
         <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <button class="hd-btn" id="btnFontH" title="Text size">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" stroke="none"><text x="0.5" y="18" font-size="16" font-weight="800">A</text><text x="13" y="13" font-size="12" font-weight="800">+</text></svg>
       </button>
       <button class="hd-btn" id="btnHistoryH" title="Toggle view"></button>
       <button class="hd-btn" id="btnExportH" title="Backup / restore">
@@ -460,6 +467,20 @@ const $ = (id) => document.getElementById(id);
 const COLORS = ["blue", "green", "purple", "yellow"];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+/* ── user-adjustable text size: toolbar "A+" cycles 3 sizes, persisted in settings ── */
+const FONT_SCALES = [1, 1.18, 1.36];
+function fontIdx() { const i = root.settings && root.settings.fontScale; return Number.isInteger(i) && i >= 0 && i < FONT_SCALES.length ? i : 0; }
+let uiFontScale = FONT_SCALES[fontIdx()];
+function applyFontScale() { uiFontScale = FONT_SCALES[fontIdx()]; document.documentElement.style.setProperty("--fs", String(uiFontScale)); }
+function cycleFont() {
+  root.settings.fontScale = (fontIdx() + 1) % FONT_SCALES.length;   // rolls over to smallest
+  store.save(); applyFontScale(); renderTiles();
+  toast("Text size " + (fontIdx() + 1) + "/" + FONT_SCALES.length);
+}
+$("btnFont").addEventListener("click", cycleFont);
+{ const b = $("btnFontH"); if (b) b.addEventListener("click", cycleFont); }
+applyFontScale();
+
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1600);
@@ -482,6 +503,16 @@ function dateLabel(ts) {
   return wd + ", " + d.getDate() + " " + mo;
 }
 
+/* iOS fires synthetic mouse events ~300ms after a touch. Both the tile and
+   swatch handlers bind touch AND mouse, so without this guard every tap is
+   processed twice — the synthetic second tap on a tile instantly de-selects
+   it, leaving nothing selected when the swatch is tapped (so no colour applies).
+   Record the last touch time and have the mouse paths bail shortly after. */
+let lastTouchTime = 0;
+const touchRecent = () => Date.now() - lastTouchTime < 1000;
+document.addEventListener("touchstart", () => { lastTouchTime = Date.now(); }, true);
+document.addEventListener("touchend", () => { lastTouchTime = Date.now(); }, true);
+
 /* ════════════════════ GESTURES ════════════════════ */
 /* Attaches tap / dblTap / swipeLeft / swipeRight / longPress to an element. */
 function gestures(el, h) {
@@ -489,6 +520,7 @@ function gestures(el, h) {
   let lastTap = 0, tapTimer = null;
 
   const down = (e) => {
+    if (!e.touches && touchRecent()) return;   // ignore synthetic mouse after touch
     const p = e.touches ? e.touches[0] : e;
     sx = p.clientX; sy = p.clientY; st = Date.now(); moved = false; lpFired = false;
     if (h.longPress) { lpTimer = setTimeout(() => { lpFired = true; h.longPress(e); }, 480); }
@@ -498,6 +530,7 @@ function gestures(el, h) {
     if (Math.abs(p.clientX - sx) > 8 || Math.abs(p.clientY - sy) > 8) { moved = true; clearTimeout(lpTimer); }
   };
   const up = (e) => {
+    if (!e.changedTouches && touchRecent()) return;   // ignore synthetic mouse after touch
     clearTimeout(lpTimer);
     if (lpFired) return;
     const p = e.changedTouches ? e.changedTouches[0] : e;
@@ -536,7 +569,7 @@ const pt = (e) => { const p = e.touches && e.touches[0] ? e.touches[0] : (e.chan
 
 function attachTile(el, t) {
   const start = (e) => {
-    if (e.type === "mousedown" && e.button !== 0) return;
+    if (e.type === "mousedown" && (e.button !== 0 || touchRecent())) return;   // ignore synthetic mouse after touch
     if (e.target.classList && e.target.classList.contains("tile-edit")) return;
     if ($("popupMask").classList.contains("open")) return;
     const p = pt(e);
@@ -725,9 +758,9 @@ function selectByColor(color) {
 /* ════════════════════ RENDER ════════════════════ */
 function fitText(tile) {
   const inner = tile.querySelector(".tile-text");
-  let size = 15.5; inner.style.fontSize = size + "px";
+  let size = 16.5 * uiFontScale; inner.style.fontSize = size + "px";
   let guard = 0;
-  while (guard++ < 40 && (inner.scrollHeight > tile.clientHeight - 10 || inner.scrollWidth > tile.clientWidth - 8) && size > 8.5) {
+  while (guard++ < 40 && (inner.scrollHeight > tile.clientHeight - 10 || inner.scrollWidth > tile.clientWidth - 8) && size > 9.5) {
     size -= 0.5; inner.style.fontSize = size + "px";
   }
 }
@@ -1135,6 +1168,7 @@ $("importFile").addEventListener("change", (e) => {
       root = normalize(obj);                       // restores all lists
       state = ensureList(root.activeList);
       selected.clear(); firstTiles = true; firstFav = true;
+      applyFontScale();
       store.saveNow(); renderAll(); updateListButton(); toast("Backup restored");
     } catch (err) { toast("Invalid backup file"); }
   };
@@ -1175,6 +1209,11 @@ syncHeight();
 
 /* request durable storage opportunistically (best-effort; unreliable on iOS) */
 if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(() => {}); }
+
+/* register service worker for offline launch (no-op on file:// or unsupported browsers) */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
 
 /* ════════════════════ INIT ════════════════════ */
 renderAll(); updateListButton();
