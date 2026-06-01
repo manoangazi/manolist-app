@@ -190,16 +190,35 @@ header {
 /* important-flag swatch: white centre ringed by the bright-pink highlighter */
 .swatch[data-c="outline"] { background: #fff; box-shadow: inset 0 0 0 3px #ff2d9b, inset 0 0 9px 2px rgba(255,45,155,.65); }
 
+/* ══════════════ RESIZABLE DRAWER (pinned + history) ══════════════ */
+/* user-draggable height (persisted); the tile board (flex:1) takes the rest */
+.drawer {
+  flex: 0 0 auto; height: var(--drawer-h, 245px);
+  max-height: calc(var(--app-h, 100dvh) - 220px);   /* always leave room for header + board + composer */
+  min-height: 50px;
+  display: flex; flex-direction: column; min-width: 0;
+}
+.drawer-handle {
+  flex: 0 0 auto; height: 18px; display: grid; place-items: center;
+  background: var(--header); border-top: 1px solid var(--line);
+  cursor: ns-resize; touch-action: none; -webkit-user-select: none; user-select: none;
+}
+.drawer-handle:active .drawer-grip { background: var(--accent); opacity: .8; }
+.drawer-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--text-mute); opacity: .45; }
+
 /* ══════════════ FAVOURITES ══════════════ */
 /* single row: inline toggle (chevron) at left + chips; tap the toggle to expand */
 .fav {
-  flex: 0 0 auto; background: var(--header); border-top: 1px solid var(--line);
+  flex: 0 0 auto; background: var(--header);
   padding: 8px 10px; padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
-  display: flex; align-items: flex-end; gap: 6px;
+  display: flex; align-items: flex-end; gap: 6px; min-height: 0;
 }
-/* collapsed (1 row) by default; the inline toggle flips .fav-open to expand */
-.fav-row { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; height: 34px; overflow-y: auto; -webkit-overflow-scrolling: touch; transition: height .2s ease; }
-.fav.fav-open .fav-row { height: 228px; }   /* expanded: pins take the entire shared block (peek collapses to 0) */
+/* collapsed (1 row); peek (sibling) fills the rest of the drawer */
+.fav-row { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; height: 34px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* expanded: pins fill the whole drawer and the peek hides */
+.fav.fav-open { flex: 1 1 auto; align-items: stretch; }
+.fav.fav-open .fav-row { height: auto; }
+.fav.fav-open + .peek { display: none; }
 .fav-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px; margin-top: auto; }
 .fav-toggle { flex: 0 0 auto; height: 34px; display: flex; align-items: center; gap: 3px; background: none; border: none; padding: 0 2px; color: var(--text-dim); cursor: pointer; user-select: none; -webkit-user-select: none; }
 .fav-toggle:active { opacity: .55; }
@@ -214,17 +233,13 @@ header {
 .fav-empty { font-size: 13px; color: var(--text-mute); padding: 4px 2px; }
 
 /* ══════════════ HISTORY PEEK ══════════════ */
+/* fills whatever drawer space remains below the pinned strip */
 .peek {
-  flex: 0 0 auto; height: 116px; background: var(--bg);
+  flex: 1 1 auto; min-height: 0; background: var(--bg);
   border-top: 1px solid var(--line); position: relative;
   display: flex; flex-direction: column;
   padding-right: var(--rail-w);   /* right gutter aligns scrollbar with the tiles area */
-  transition: height .2s ease;
 }
-/* the peek grows to absorb the space freed by the pinned strip, so the tile board stays a constant size */
-.peek.peek-min  { height: 0; min-height: 0; border-top-width: 0; overflow: hidden; }   /* pins EXPANDED: peek fully yields its space to the pinned area */
-.peek.peek-mid  { height: 194px; }   /* pins collapsed (1 row): peek takes the big viewing area */
-.peek.peek-tall { height: 260px; }   /* pinned strip hidden entirely (no pins) */
 .peek-scroll { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px; display: flex; flex-direction: column; gap: 5px; }
 .peek-scroll > :first-child { margin-top: auto; }   /* keep newest pinned to the bottom while staying scrollable upward */
 .peek-line { font-size: calc(15.5px * var(--fs)); color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
@@ -351,18 +366,23 @@ header {
     </div>
   </div>
 
-  <!-- FAVOURITES -->
-  <div class="fav" id="fav">
-    <button class="fav-toggle" id="favToggle" title="Pinned · tap to expand / collapse">
-      <svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 17.3l-6 3.7 1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.6 4.9L18 21z"/></svg>
-      <svg class="icon fav-chev" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
-    <div class="fav-row" id="favRow"><div class="fav-chips" id="favChips"></div></div>
-  </div>
+  <!-- RESIZABLE DRAWER: pinned strip + history peek (drag the handle to resize vs the tile board) -->
+  <div class="drawer" id="drawer">
+    <div class="drawer-handle" id="drawerHandle" title="Drag to resize the tiles / history split"><div class="drawer-grip"></div></div>
 
-  <!-- HISTORY PEEK -->
-  <div class="peek" id="peek">
-    <div class="peek-scroll" id="peekScroll"></div>
+    <!-- FAVOURITES -->
+    <div class="fav" id="fav">
+      <button class="fav-toggle" id="favToggle" title="Pinned · tap to expand / collapse">
+        <svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 17.3l-6 3.7 1.6-6.9L2 9.2l7-.6L12 2l3 6.6 7 .6-5.6 4.9L18 21z"/></svg>
+        <svg class="icon fav-chev" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="fav-row" id="favRow"><div class="fav-chips" id="favChips"></div></div>
+    </div>
+
+    <!-- HISTORY PEEK -->
+    <div class="peek" id="peek">
+      <div class="peek-scroll" id="peekScroll"></div>
+    </div>
   </div>
 
   <!-- COMPOSER -->
@@ -499,19 +519,45 @@ $("btnFont").addEventListener("click", cycleFont);
 { const b = $("btnFontH"); if (b) b.addEventListener("click", cycleFont); }
 applyFontScale();
 
-/* ── pinned strip collapse/expand: star label toggles between 1 row and full height ── */
+/* ── pinned strip collapse/expand: star toggle. Within the drawer, the peek (sibling)
+   flex-fills whatever space the pins don't use; expanded pins fill the drawer (peek hidden). ── */
 function favOpen() { return !!(root.settings && root.settings.favOpen); }
-/* peek and pinned strip swap the big space: no pins -> peek tall; pins collapsed -> peek mid (big);
-   pins expanded -> peek min (sliver) so the pinned area takes the room. Board stays constant. */
-function updatePeekHeight() {
-  const peek = $("peek"); if (!peek) return;
-  const empty = !state.favourites.length;
-  peek.classList.toggle("peek-tall", empty);
-  peek.classList.toggle("peek-mid", !empty && !favOpen());
-  peek.classList.toggle("peek-min", !empty && favOpen());
-}
-function applyFavOpen() { const f = $("fav"); if (f) f.classList.toggle("fav-open", favOpen()); updatePeekHeight(); }
+/* only treat as open when there are pins to show, else the peek-hide rule would blank the drawer */
+function applyFavOpen() { const f = $("fav"); if (f) f.classList.toggle("fav-open", favOpen() && state.favourites.length > 0); }
 function toggleFav() { root.settings.favOpen = !favOpen(); store.save(); applyFavOpen(); }
+
+/* ── resizable drawer: drag the handle to set the tiles / history split (persisted) ── */
+const DRAWER_MIN = 60;
+function drawerH() { const v = root.settings && root.settings.drawerH; return (typeof v === "number" && v >= DRAWER_MIN && v <= 2000) ? v : 245; }
+function applyDrawerH() { document.documentElement.style.setProperty("--drawer-h", drawerH() + "px"); }
+let drawerDrag = null;
+function drawerDown(e) {
+  const p = e.touches ? e.touches[0] : e;
+  drawerDrag = { startY: p.clientY, startH: $("drawer").getBoundingClientRect().height };
+  if (e.cancelable) e.preventDefault();
+}
+function drawerMove(e) {
+  if (!drawerDrag) return;
+  const p = e.touches ? e.touches[0] : e;
+  const appH = $("app").clientHeight;
+  let h = drawerDrag.startH + (drawerDrag.startY - p.clientY);   // drag up → taller drawer
+  h = Math.max(DRAWER_MIN, Math.min(h, Math.max(DRAWER_MIN, appH - 220)));
+  document.documentElement.style.setProperty("--drawer-h", h + "px");
+  if (e.cancelable) e.preventDefault();
+}
+function drawerUp() {
+  if (!drawerDrag) return;
+  drawerDrag = null;
+  root.settings.drawerH = Math.round($("drawer").getBoundingClientRect().height);
+  store.save();
+}
+$("drawerHandle").addEventListener("touchstart", drawerDown, { passive: false });
+$("drawerHandle").addEventListener("mousedown", drawerDown);
+document.addEventListener("touchmove", drawerMove, { passive: false });
+document.addEventListener("mousemove", drawerMove);
+document.addEventListener("touchend", drawerUp);
+document.addEventListener("mouseup", drawerUp);
+applyDrawerH();
 $("favToggle").addEventListener("click", toggleFav);
 applyFavOpen();
 
@@ -842,15 +888,15 @@ function renderRail() {
 
 function renderFav() {
   const row = $("favRow"), box = $("favChips");
-  // collapse the whole pinned strip when empty; let the history peek take the space
+  // hide the pinned strip when empty; the peek then fills the whole drawer
   if (!state.favourites.length) {
     $("fav").style.display = "none";
-    updatePeekHeight();
+    applyFavOpen();   // ensure fav-open is cleared so the peek isn't hidden
     box.innerHTML = "";
     return;
   }
   $("fav").style.display = "";
-  updatePeekHeight();
+  applyFavOpen();
   const prev = row.scrollTop;
   const wasBottom = row.scrollHeight - prev - row.clientHeight < 40;
   box.innerHTML = "";
@@ -1232,7 +1278,7 @@ $("importFile").addEventListener("change", (e) => {
       root = normalize(obj);                       // restores all lists
       state = ensureList(root.activeList);
       selected.clear(); firstTiles = true; firstFav = true;
-      applyFontScale(); applyFavOpen();
+      applyFontScale(); applyFavOpen(); applyDrawerH();
       store.saveNow(); renderAll(); updateListButton(); toast("Backup restored");
     } catch (err) { toast("Invalid backup file"); }
   };
