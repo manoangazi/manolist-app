@@ -1458,6 +1458,10 @@ function syncHeight() {
   const vv = window.visualViewport;
   const h = vv ? vv.height : window.innerHeight;
   document.documentElement.style.setProperty("--app-h", h + "px");
+  /* iOS doesn't shrink the page for the keyboard — it keeps the full layout viewport and
+     scrolls it up, exposing a shorter visual viewport (offsetTop > 0). Shift #app down by
+     that offset so its bottom (the composer) hugs the keyboard instead of floating above it. */
+  $("app").style.transform = vv && vv.offsetTop ? "translateY(" + vv.offsetTop + "px)" : "";
   requestAnimationFrame(syncTileHeight);   // swatch height changes with viewport
 }
 if (window.visualViewport) {
