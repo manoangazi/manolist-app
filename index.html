@@ -520,6 +520,7 @@ let root = store.load();
 function ensureList(n) { const k = String(n); if (!root.lists[k]) root.lists[k] = blankList(); return root.lists[k]; }
 let state = ensureList(root.activeList);   // `state` = the active list; downstream code unchanged
 const selected = new Set();   // selected tile ids (live, not persisted)
+let archiveView = false;      // history overlay showing archived items instead of live (live flag, not persisted)
 
 /* ════════════════════ HELPERS ════════════════════ */
 const $ = (id) => document.getElementById(id);
@@ -947,7 +948,7 @@ function renderFav() {
 
 function renderPeek() {
   const c = $("peekScroll"); c.innerHTML = "";
-  const recent = state.history.slice(-30);
+  const recent = state.history.filter(h => !h.archived).slice(-30);
   recent.forEach(h => {
     const line = document.createElement("div");
     line.className = "peek-line";
@@ -959,11 +960,30 @@ function renderPeek() {
   c.scrollTop = c.scrollHeight;
 }
 
+/* build one history bubble into container `c`, wiring the given gesture handlers */
+function appendBubble(c, h, handlers) {
+  const wrap = document.createElement("div");
+  wrap.className = "bubble-wrap";
+  const b = document.createElement("div");
+  const bhc = highlightColor(h);
+  b.className = "bubble" + (h.done ? " done" : "") + (bhc === "cyan" ? " hi-cyan" : bhc === "pink" ? " hi" : ""); b.dataset.id = h.id;
+  if (h.done) { b.style.background = "#868e96"; }   // gray takes priority over any colour fill
+  else { const fill = histFill(h.color); if (fill) b.style.background = fill.bg; }   // deep fill behind white text
+  b.innerHTML = '<span></span><time></time>';
+  b.querySelector("span").textContent = h.text;
+  b.querySelector("time").textContent = fmtTime(h.ts);
+  wrap.appendChild(b); c.appendChild(wrap);
+  gestures(b, handlers);
+  return b;
+}
+
 function renderHistory() {
   const c = $("histScroll"); c.innerHTML = "";
-  if (!state.history.length) { c.innerHTML = '<div class="hist-empty">Nothing yet.<br>Items you add will appear here, newest at the bottom.</div>'; return; }
+  if (archiveView) { renderArchive(c); return; }
+  const live = state.history.filter(h => !h.archived);   // archived items are hidden here, not deleted
+  if (!live.length) { c.innerHTML = '<div class="hist-empty">Nothing yet.<br>Items you add will appear here, newest at the bottom.</div>'; return; }
   const byColor = histSort() === "color";
-  let items = state.history;
+  let items = live;
   if (byColor) {
     // group by swatch colour first (swatch order, uncoloured last); within each colour group:
     // non-highlighted first, then highlighted sub-split (pink, then cyan) at the bottom;
@@ -972,7 +992,7 @@ function renderHistory() {
     const colorRank = (cl) => { const i = ORDER.indexOf(cl); return i === -1 ? ORDER.length : i; };
     const HI_ORDER = ["pink", "cyan"];
     const hiRank = (h) => { const i = HI_ORDER.indexOf(highlightColor(h)); return i === -1 ? 0 : i + 1; };
-    items = state.history
+    items = live
       .map((h, i) => ({ h, i }))
       .sort((a, b) =>
         (colorRank(a.h.color) - colorRank(b.h.color)) ||
@@ -992,18 +1012,7 @@ function renderHistory() {
         c.appendChild(sep);
       }
     }
-    const wrap = document.createElement("div");
-    wrap.className = "bubble-wrap";
-    const b = document.createElement("div");
-    const bhc = highlightColor(h);
-    b.className = "bubble" + (h.done ? " done" : "") + (bhc === "cyan" ? " hi-cyan" : bhc === "pink" ? " hi" : ""); b.dataset.id = h.id;
-    if (h.done) { b.style.background = "#868e96"; }   // gray takes priority over any colour fill
-    else { const fill = histFill(h.color); if (fill) b.style.background = fill.bg; }   // deep fill behind white text
-    b.innerHTML = '<span></span><time></time>';
-    b.querySelector("span").textContent = h.text;
-    b.querySelector("time").textContent = fmtTime(h.ts);
-    wrap.appendChild(b); c.appendChild(wrap);
-    gestures(b, {
+    const b = appendBubble(c, h, {
       dblTap: () => toggleHistoryDone(h),
       longPress: () => openHistoryPopup(h, b),
       swipeLeft: () => deleteHistory(h.id),
@@ -1011,6 +1020,26 @@ function renderHistory() {
     });
   });
   c.scrollTop = c.scrollHeight;
+}
+
+/* archive view: every archived item, newest first → oldest last (date order, latest at top) */
+function renderArchive(c) {
+  const sep = document.createElement("div");
+  sep.className = "date-sep"; sep.innerHTML = '<span>Archive</span>';
+  c.appendChild(sep);
+  const arch = state.history.filter(h => h.archived).slice().sort((a, b) => b.ts - a.ts);
+  if (!arch.length) {
+    const e = document.createElement("div");
+    e.className = "hist-empty"; e.innerHTML = "Nothing archived.<br>Strike out items, then choose Archive strikeouts from the backup menu.";
+    c.appendChild(e); return;
+  }
+  arch.forEach(h => {
+    appendBubble(c, h, {
+      longPress: () => openHistoryPopup(h, document.querySelector('.bubble[data-id="' + h.id + '"]')),
+      swipeRight: () => { if (isPinned(h.text)) toast("Already pinned"); else pinItem(h.text); }
+    });
+  });
+  c.scrollTop = 0;   // latest archived item sits at the top
 }
 
 function renderAll() { renderTiles(); renderRail(); renderFav(); renderPeek(); }
@@ -1159,6 +1188,9 @@ function openHistoryPopup(h, el) {
       })) },
     { label: "Edit", icon: ICO_EDIT, action: () => startEditHistory(h) },
     { label: h.done ? "Remove strikeout" : "Strikeout", icon: ICO_CHK, action: () => toggleHistoryDone(h) },
+    h.archived
+      ? { label: "Unarchive", icon: ICO_ARCHIVE, action: () => { h.archived = false; store.save(); renderHistory(); renderPeek(); toast("Unarchived"); } }
+      : { label: "Archive", icon: ICO_ARCHIVE, action: () => { h.archived = true; store.save(); renderHistory(); renderPeek(); toast("Archived"); } },
     { label: hc === "pink" ? "Remove highlight" : "Highlight", icon: ICO_HILITE, action: () => toggleHighlightColor(h, "pink") },
     { label: hc === "cyan" ? "Remove highlight" : "Cyan highlight", icon: ICO_HILITE_C, action: () => toggleHighlightColor(h, "cyan") },
     isPinned(h.text)
@@ -1300,7 +1332,7 @@ const ICO_VIEW_MAIN = '<svg class="icon" viewBox="0 0 24 24" style="width:21px;h
 function setView(mode) {
   const isHist = mode === "history";
   if (isHist) { renderHistory(); $("history").classList.add("open"); }
-  else { $("history").classList.remove("open"); }
+  else { archiveView = false; $("history").classList.remove("open"); }
   /* main-page toggle reflects the *other* mode it switches to; history-page toggle the same */
   $("btnHistory").innerHTML = isHist ? ICO_VIEW_HIST : ICO_VIEW_MAIN;
   $("btnHistoryH").innerHTML = isHist ? ICO_VIEW_HIST : ICO_VIEW_MAIN;
@@ -1336,6 +1368,24 @@ $("btnShare").addEventListener("click", shareList);
 /* ════════════════════ BACKUP ════════════════════ */
 const ICO_EXPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 3v12m0-12l-4 4m4-4l4 4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
 const ICO_IMPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 15V3m0 12l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
+const ICO_ARCHIVE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M9.5 12h5"/></svg>';
+const ICO_EYE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+/* archive = hide struck-out (done) items from history without deleting them */
+function archiveDone() {
+  const done = state.history.filter(h => h.done && !h.archived);
+  if (!done.length) { toast("No struck-out items"); return; }
+  done.forEach(h => h.archived = true);
+  store.save(); renderHistory(); renderPeek();
+  toast(done.length + " archived");
+}
+/* toggle the history overlay between live items and the archive (latest first) */
+function toggleArchiveView() {
+  archiveView = !archiveView;
+  if (!$("history").classList.contains("open")) setView("history");   // setView renders for us
+  else renderHistory();
+  toast(archiveView ? "Showing archive" : "Showing history");
+}
 
 async function exportBackup() {
   store.saveNow();
@@ -1356,19 +1406,24 @@ async function exportBackup() {
 
 /* tapping the backup button offers both Export and Import */
 function openBackupMenu(anchor) {
+  const nDone = state.history.filter(h => h.done && !h.archived).length;
   showPopup(anchor, [
     { label: "Export backup", icon: ICO_EXPORT, action: exportBackup },
     { label: "Import backup", icon: ICO_IMPORT, action: () => $("importFile").click() },
+    { label: "Archive strikeouts" + (nDone ? " (" + nDone + ")" : ""), icon: ICO_ARCHIVE, action: archiveDone },
+    { label: archiveView ? "Hide archive" : "View archive", icon: ICO_EYE, action: toggleArchiveView },
     { label: "Delete history", icon: ICO_DEL, danger: true, action: () => confirmClearHistory(anchor) }
   ]);
 }
-/* clears the ACTIVE list's history only (tiles & pins kept); two-step confirm */
+/* clears the ACTIVE list's live history (tiles, pins & the archive are kept); two-step confirm */
 function confirmClearHistory(anchor) {
-  const n = state.history.length;
-  if (!n) { toast("No history"); return; }
+  const live = state.history.filter(h => !h.archived);
+  const n = live.length;
+  if (!n) { toast(state.history.length ? "Only archived items remain" : "No history"); return; }
   showPopup(anchor, [
     { label: "Delete " + n + " history item" + (n > 1 ? "s" : ""), icon: ICO_DEL, danger: true, action: () => {
-        state.history = []; store.save(); renderHistory(); renderPeek(); toast("History cleared");
+        state.history = state.history.filter(h => h.archived);   // keep archived items
+        store.save(); renderHistory(); renderPeek(); toast("History cleared");
     } }
   ]);
 }
