@@ -520,12 +520,73 @@ let root = store.load();
 function ensureList(n) { const k = String(n); if (!root.lists[k]) root.lists[k] = blankList(); return root.lists[k]; }
 let state = ensureList(root.activeList);   // `state` = the active list; downstream code unchanged
 const selected = new Set();   // selected tile ids (live, not persisted)
-let archiveView = false;      // history overlay showing archived items instead of live (live flag, not persisted)
 
 /* ════════════════════ HELPERS ════════════════════ */
 const $ = (id) => document.getElementById(id);
 const COLORS = ["blue", "green", "purple", "yellow"];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* ── CROSS-VIEW SYNC ──────────────────────────────────────────────────────
+   The tiled board and the Signal-style history stream are ONE logical list,
+   rendered two ways. They are linked by item text (kept unique by add-dedupe,
+   the same key the highlight code already uses). Every per-item mutation —
+   add, rename, delete, mark-done — must go through these helpers so both
+   views stay in lock-step. */
+const norm = (s) => (s || "").trim().toLowerCase();
+/* mark an item done/active in both views */
+function setDoneByText(text, done) {
+  const key = norm(text);
+  state.tiles.forEach(t => { if (norm(t.text) === key) t.done = done; });
+  state.history.forEach(h => { if (norm(h.text) === key) h.done = done; });
+}
+/* rename an item in both views (match on the OLD text) */
+function renameByText(oldText, newText) {
+  const key = norm(oldText);
+  state.tiles.forEach(t => { if (norm(t.text) === key) t.text = newText; });
+  state.history.forEach(h => { if (norm(h.text) === key) h.text = newText; });
+}
+/* remove an item from both views */
+function removeByText(text) {
+  const key = norm(text);
+  state.tiles = state.tiles.filter(t => norm(t.text) !== key);
+  state.history = state.history.filter(h => norm(h.text) !== key);
+}
+
+/* Reconcile one list so tiles and history hold the SAME set of items (keyed by
+   text). Repairs older data where the two arrays drifted — this is what makes
+   the list view finally show everything on the board (and vice-versa). */
+function reconcileList(L) {
+  if (!L) return;
+  const hc = (h) => (h.hiColor === "pink" || h.hiColor === "cyan") ? h.hiColor : (h.hi ? "pink" : null);
+  const now = Date.now();
+  const tileByText = new Map(), histByText = new Map();
+  // collapse any duplicate-text rows within each array (keep the first)
+  L.tiles = (L.tiles || []).filter(t => { const k = norm(t.text); if (!k || tileByText.has(k)) return false; tileByText.set(k, t); return true; });
+  L.history = (L.history || []).filter(h => { const k = norm(h.text); if (!k || histByText.has(k)) return false; delete h.archived; histByText.set(k, h); return true; });
+  // every tile needs a matching history bubble
+  L.tiles.forEach(t => {
+    const k = norm(t.text);
+    if (!histByText.has(k)) {
+      const c = (t.hiColor === "pink" || t.hiColor === "cyan") ? t.hiColor : (t.important ? "pink" : null);
+      const h = { id: uid(), text: t.text, ts: t.createdAt || now, hi: !!c, hiColor: c, done: !!t.done };
+      L.history.push(h); histByText.set(k, h);
+    }
+  });
+  // every history bubble needs a matching tile
+  L.history.forEach(h => {
+    const k = norm(h.text);
+    if (!tileByText.has(k)) {
+      const c = hc(h);
+      const t = { id: uid(), text: h.text, color: null, important: c === "pink", hiColor: c, done: !!h.done, createdAt: h.ts || now };
+      L.tiles.push(t); tileByText.set(k, t);
+    }
+  });
+  // matched pairs: if either side is done, both are done
+  L.tiles.forEach(t => { const h = histByText.get(norm(t.text)); if (h) { const d = t.done || h.done; t.done = d; h.done = d; } });
+}
+/* repair any historical tiles↔history drift on load, then the sync helpers keep them locked */
+Object.keys(root.lists).forEach(k => reconcileList(root.lists[k]));
+store.save();
 
 /* ── user-adjustable text size: toolbar "A+" cycles 3 sizes, persisted in settings ── */
 const FONT_SCALES = [1, 1.18, 1.36];
@@ -771,7 +832,7 @@ function onEnd(e) {
   const now = Date.now();
   if (tLastTapId === d.t.id && now - tLastTapTime < 300) {
     clearTimeout(tTapTimer); tLastTapId = null;
-    d.t.done = !d.t.done; store.save(); renderTiles();
+    setDoneByText(d.t.text, !d.t.done); store.save(); renderTiles(); renderPeek(); renderHistory();
   } else {
     tLastTapId = d.t.id; tLastTapTime = now;
     tTapTimer = setTimeout(() => {
@@ -800,10 +861,10 @@ function startEditById(id) {
       const v = inp.value.trim();
       if (v && v.toLowerCase() !== t.text.toLowerCase()) {
         if (state.tiles.some(x => x.id !== t.id && x.text.toLowerCase() === v.toLowerCase())) toast("Already on the list");
-        else t.text = v;
-      } else if (v) { t.text = v; }
+        else renameByText(t.text, v);   // rename in both views
+      } else if (v) { renameByText(t.text, v); }
     }
-    store.save(); renderTiles();
+    store.save(); renderTiles(); renderPeek(); renderHistory();
   };
   inp.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); commit(true); }
@@ -849,18 +910,18 @@ function unpinItem(text) {
 }
 
 function deleteTile(id) {
-  state.tiles = state.tiles.filter(t => t.id !== id);
+  const t = state.tiles.find(x => x.id === id);
   selected.delete(id);
-  store.save(); renderTiles();
+  if (t) removeByText(t.text); else state.tiles = state.tiles.filter(x => x.id !== id);
+  store.save(); renderTiles(); renderPeek(); renderHistory();
 }
 
-/* clear all completed (done) tiles in the active list; History is untouched */
+/* clear all completed (done) items in the active list — from BOTH views */
 function clearDoneTiles() {
   const done = state.tiles.filter(t => t.done);
   if (!done.length) { toast("No completed items"); return; }
-  done.forEach(t => selected.delete(t.id));
-  state.tiles = state.tiles.filter(t => !t.done);
-  store.save(); renderTiles();
+  done.forEach(t => { selected.delete(t.id); removeByText(t.text); });
+  store.save(); renderTiles(); renderPeek(); renderHistory();
   toast(done.length + " completed cleared");
 }
 
@@ -948,7 +1009,7 @@ function renderFav() {
 
 function renderPeek() {
   const c = $("peekScroll"); c.innerHTML = "";
-  const recent = state.history.filter(h => !h.archived).slice(-30);
+  const recent = state.history.slice(-30);
   recent.forEach(h => {
     const line = document.createElement("div");
     line.className = "peek-line";
@@ -979,8 +1040,7 @@ function appendBubble(c, h, handlers) {
 
 function renderHistory() {
   const c = $("histScroll"); c.innerHTML = "";
-  if (archiveView) { renderArchive(c); return; }
-  const live = state.history.filter(h => !h.archived);   // archived items are hidden here, not deleted
+  const live = state.history;
   if (!live.length) { c.innerHTML = '<div class="hist-empty">Nothing yet.<br>Items you add will appear here, newest at the bottom.</div>'; return; }
   const byColor = histSort() === "color";
   let items = live;
@@ -1020,26 +1080,6 @@ function renderHistory() {
     });
   });
   c.scrollTop = c.scrollHeight;
-}
-
-/* archive view: every archived item, newest first → oldest last (date order, latest at top) */
-function renderArchive(c) {
-  const sep = document.createElement("div");
-  sep.className = "date-sep"; sep.innerHTML = '<span>Archive</span>';
-  c.appendChild(sep);
-  const arch = state.history.filter(h => h.archived).slice().sort((a, b) => b.ts - a.ts);
-  if (!arch.length) {
-    const e = document.createElement("div");
-    e.className = "hist-empty"; e.innerHTML = "Nothing archived.<br>Strike out items, then choose Archive strikeouts from the backup menu.";
-    c.appendChild(e); return;
-  }
-  arch.forEach(h => {
-    appendBubble(c, h, {
-      longPress: () => openHistoryPopup(h, document.querySelector('.bubble[data-id="' + h.id + '"]')),
-      swipeRight: () => { if (isPinned(h.text)) toast("Already pinned"); else pinItem(h.text); }
-    });
-  });
-  c.scrollTop = 0;   // latest archived item sits at the top
 }
 
 function renderAll() { renderTiles(); renderRail(); renderFav(); renderPeek(); }
@@ -1188,9 +1228,6 @@ function openHistoryPopup(h, el) {
       })) },
     { label: "Edit", icon: ICO_EDIT, action: () => startEditHistory(h) },
     { label: h.done ? "Remove strikeout" : "Strikeout", icon: ICO_CHK, action: () => toggleHistoryDone(h) },
-    h.archived
-      ? { label: "Unarchive", icon: ICO_ARCHIVE, action: () => { h.archived = false; store.save(); renderHistory(); renderPeek(); toast("Unarchived"); } }
-      : { label: "Archive", icon: ICO_ARCHIVE, action: () => { h.archived = true; store.save(); renderHistory(); renderPeek(); toast("Archived"); } },
     { label: hc === "pink" ? "Remove highlight" : "Highlight", icon: ICO_HILITE, action: () => toggleHighlightColor(h, "pink") },
     { label: hc === "cyan" ? "Remove highlight" : "Cyan highlight", icon: ICO_HILITE_C, action: () => toggleHighlightColor(h, "cyan") },
     isPinned(h.text)
@@ -1200,12 +1237,13 @@ function openHistoryPopup(h, el) {
   ]);
 }
 function toggleHistoryDone(h) {
-  h.done = !h.done;
-  store.save(); renderHistory();
+  setDoneByText(h.text, !h.done);   // strike out in both views
+  store.save(); renderHistory(); renderPeek(); renderTiles();
 }
 function deleteHistory(id) {
-  state.history = state.history.filter(x => x.id !== id);
-  store.save(); renderHistory(); renderPeek(); toast("Removed from history");
+  const h = state.history.find(x => x.id === id);
+  if (h) removeByText(h.text); else state.history = state.history.filter(x => x.id !== id);
+  store.save(); renderHistory(); renderPeek(); renderTiles(); toast("Removed");
 }
 
 function startEditHistory(h) {
@@ -1217,8 +1255,8 @@ function startEditHistory(h) {
   let closed = false;
   const commit = (save) => {
     if (closed) return; closed = true;
-    if (save) { const v = inp.value.trim(); if (v) h.text = v; }
-    store.save(); renderHistory(); renderPeek();
+    if (save) { const v = inp.value.trim(); if (v) renameByText(h.text, v); }   // rename in both views
+    store.save(); renderHistory(); renderPeek(); renderTiles();
   };
   inp.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); commit(true); }
@@ -1229,7 +1267,7 @@ function startEditHistory(h) {
 function openTilePopup(t, el) {
   showPopup(el, [
     { label: "Edit", icon: ICO_EDIT, action: () => startEditById(t.id) },
-    { label: t.done ? "Mark active" : "Mark done", icon: ICO_CHK, action: () => { t.done = !t.done; store.save(); renderTiles(); } },
+    { label: t.done ? "Mark active" : "Mark done", icon: ICO_CHK, action: () => { setDoneByText(t.text, !t.done); store.save(); renderTiles(); renderPeek(); renderHistory(); } },
     { label: "Pin", icon: ICO_PIN, action: () => pinItem(t.text) },
     { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteTile(t.id) }
   ]);
@@ -1332,7 +1370,7 @@ const ICO_VIEW_MAIN = '<svg class="icon" viewBox="0 0 24 24" style="width:21px;h
 function setView(mode) {
   const isHist = mode === "history";
   if (isHist) { renderHistory(); $("history").classList.add("open"); }
-  else { archiveView = false; $("history").classList.remove("open"); }
+  else { $("history").classList.remove("open"); }
   /* main-page toggle reflects the *other* mode it switches to; history-page toggle the same */
   $("btnHistory").innerHTML = isHist ? ICO_VIEW_HIST : ICO_VIEW_MAIN;
   $("btnHistoryH").innerHTML = isHist ? ICO_VIEW_HIST : ICO_VIEW_MAIN;
@@ -1368,25 +1406,6 @@ $("btnShare").addEventListener("click", shareList);
 /* ════════════════════ BACKUP ════════════════════ */
 const ICO_EXPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 3v12m0-12l-4 4m4-4l4 4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
 const ICO_IMPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 15V3m0 12l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
-const ICO_ARCHIVE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M9.5 12h5"/></svg>';
-const ICO_EYE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
-
-/* archive = hide struck-out (done) items from history without deleting them */
-function archiveDone() {
-  const done = state.history.filter(h => h.done && !h.archived);
-  if (!done.length) { toast("No struck-out items"); return; }
-  done.forEach(h => h.archived = true);
-  store.save(); renderHistory(); renderPeek();
-  toast(done.length + " archived");
-}
-/* toggle the history overlay between live items and the archive (latest first) */
-function toggleArchiveView() {
-  archiveView = !archiveView;
-  if (!$("history").classList.contains("open")) setView("history");   // setView renders for us
-  else renderHistory();
-  toast(archiveView ? "Showing archive" : "Showing history");
-}
-
 async function exportBackup() {
   store.saveNow();
   const data = JSON.stringify(root, null, 2);   // all lists in one file
@@ -1406,24 +1425,20 @@ async function exportBackup() {
 
 /* tapping the backup button offers both Export and Import */
 function openBackupMenu(anchor) {
-  const nDone = state.history.filter(h => h.done && !h.archived).length;
   showPopup(anchor, [
     { label: "Export backup", icon: ICO_EXPORT, action: exportBackup },
     { label: "Import backup", icon: ICO_IMPORT, action: () => $("importFile").click() },
-    { label: "Archive strikeouts" + (nDone ? " (" + nDone + ")" : ""), icon: ICO_ARCHIVE, action: archiveDone },
-    { label: archiveView ? "Hide archive" : "View archive", icon: ICO_EYE, action: toggleArchiveView },
-    { label: "Delete history", icon: ICO_DEL, danger: true, action: () => confirmClearHistory(anchor) }
+    { label: "Clear list", icon: ICO_DEL, danger: true, action: () => confirmClearHistory(anchor) }
   ]);
 }
-/* clears the ACTIVE list's live history (tiles, pins & the archive are kept); two-step confirm */
+/* clears the ACTIVE list entirely — both views, since they are one list (pins are kept); two-step confirm */
 function confirmClearHistory(anchor) {
-  const live = state.history.filter(h => !h.archived);
-  const n = live.length;
-  if (!n) { toast(state.history.length ? "Only archived items remain" : "No history"); return; }
+  const n = state.history.length;
+  if (!n) { toast("Nothing to clear"); return; }
   showPopup(anchor, [
-    { label: "Delete " + n + " history item" + (n > 1 ? "s" : ""), icon: ICO_DEL, danger: true, action: () => {
-        state.history = state.history.filter(h => h.archived);   // keep archived items
-        store.save(); renderHistory(); renderPeek(); toast("History cleared");
+    { label: "Delete all " + n + " item" + (n > 1 ? "s" : ""), icon: ICO_DEL, danger: true, action: () => {
+        state.history = []; state.tiles = []; selected.clear();
+        store.save(); renderHistory(); renderPeek(); renderTiles(); toast("List cleared");
     } }
   ]);
 }
