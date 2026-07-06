@@ -1040,14 +1040,17 @@ function renderPeek() {
   c.scrollTop = c.scrollHeight;
 }
 
-/* build one history bubble into container `c`, wiring the given gesture handlers */
-function appendBubble(c, h, handlers) {
+/* build one history bubble into container `c`, wiring the given gesture handlers.
+   `archived` = render for the Archive page: charcoal fill, no strikeout (more legible). */
+function appendBubble(c, h, handlers, archived) {
   const wrap = document.createElement("div");
   wrap.className = "bubble-wrap";
   const b = document.createElement("div");
   const bhc = highlightColor(h);
-  b.className = "bubble" + (h.done ? " done" : "") + (bhc === "cyan" ? " hi-cyan" : bhc === "pink" ? " hi" : ""); b.dataset.id = h.id;
-  if (h.done) { b.style.background = "#868e96"; }   // gray takes priority over any colour fill
+  const done = h.done && !archived;   // archived items are NOT shown struck-out
+  b.className = "bubble" + (done ? " done" : "") + (bhc === "cyan" ? " hi-cyan" : bhc === "pink" ? " hi" : ""); b.dataset.id = h.id;
+  if (archived) { b.style.background = "#363b44"; }   // charcoal — white text reads clearly, no line-through
+  else if (done) { b.style.background = "#868e96"; }   // gray takes priority over any colour fill
   else { const fill = histFill(h.color); if (fill) b.style.background = fill.bg; }   // deep fill behind white text
   b.innerHTML = '<span></span><time></time>';
   b.querySelector("span").textContent = h.text;
@@ -1468,7 +1471,7 @@ function deleteArchive(id) {
 function openArchivePopup(h, el) {
   showPopup(el, [
     { label: "Restore to list", icon: ICO_RESTORE, action: () => restoreFromArchive(h.id) },
-    { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteArchive(h.id) }
+    { label: "Delete permanently", icon: ICO_DEL, danger: true, action: () => deleteArchive(h.id) }
   ]);
 }
 function renderArchivePage() {
@@ -1493,7 +1496,7 @@ function renderArchivePage() {
       longPress: () => openArchivePopup(h, b),
       swipeLeft: () => deleteArchive(h.id),
       swipeRight: () => restoreFromArchive(h.id)
-    });
+    }, true);
   });
   c.scrollTop = c.scrollHeight;
 }
