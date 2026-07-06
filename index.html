@@ -1046,7 +1046,7 @@ function appendBubble(c, h, handlers, archived) {
   const wrap = document.createElement("div");
   wrap.className = "bubble-wrap";
   const b = document.createElement("div");
-  const bhc = highlightColor(h);
+  const bhc = archived ? null : highlightColor(h);   // archived items carry no colour/highlight glow
   const done = h.done && !archived;   // archived items are NOT shown struck-out
   b.className = "bubble" + (done ? " done" : "") + (bhc === "cyan" ? " hi-cyan" : bhc === "pink" ? " hi" : ""); b.dataset.id = h.id;
   if (archived) { b.style.background = "#363b44"; }   // charcoal — white text reads clearly, no line-through
@@ -1443,9 +1443,8 @@ function archiveDone() {
   const now = Date.now();
   done.forEach((t, i) => {
     const key = norm(t.text);
-    const c = (t.hiColor === "pink" || t.hiColor === "cyan") ? t.hiColor : (t.important ? "pink" : null);
     state.archive = state.archive.filter(x => norm(x.text) !== key);   // avoid duplicate pile-up
-    state.archive.push({ id: uid(), text: t.text, ts: now + i, hi: !!c, hiColor: c, done: true });
+    state.archive.push({ id: uid(), text: t.text, ts: now + i, hi: false, hiColor: null, done: true });   // strip colour/highlight on archive
     selected.delete(t.id);
     removeByText(t.text);   // leave the live list from BOTH views
   });
