@@ -277,6 +277,7 @@ header {
   transform: translateX(100%); transition: transform .25s ease; visibility: hidden;
 }
 .history.open { transform: translateX(0); visibility: visible; }
+#archive { z-index: 40; }   /* archive sits above the history overlay so it can be opened from either page */
 .hist-head {
   flex: 0 0 auto; padding-top: var(--safe-top); background: var(--header); border-bottom: 1px solid var(--line);
   display: flex; align-items: center; gap: 8px; padding-left: 6px; padding-right: 14px; min-height: 52px;
@@ -462,6 +463,23 @@ header {
     </div>
   </div>
 
+  <!-- ARCHIVE OVERLAY (separate page; done items moved off the active list) -->
+  <div class="history" id="archive">
+    <header>
+      <div class="hd-icon">
+        <svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--accent)"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M9.5 12h5"/></svg>
+      </div>
+      <div class="hd-title"><h1>Archive</h1></div>
+      <button class="hd-btn" id="btnArchiveClear" title="Clear archive">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12"/></svg>
+      </button>
+      <button class="hd-btn" id="btnArchiveClose" title="Back">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </header>
+    <div class="hist-scroll" id="archScroll"></div>
+  </div>
+
   <!-- CONTEXT POPUP -->
   <div class="popup-mask" id="popupMask">
     <div class="popup" id="popup"></div>
@@ -477,14 +495,15 @@ header {
 /* ════════════════════ STORE (v2: 9 independent lists, 1–9) ════════════════════ */
 const KEY = "manolist";   // localStorage namespace; data is always v2
 const LIST_MIN = 1, LIST_MAX = 9;
-function blankList() { return { activeColor: null, activeImportant: false, tiles: [], favourites: [], history: [] }; }
+function blankList() { return { activeColor: null, activeImportant: false, tiles: [], favourites: [], history: [], archive: [] }; }
 function freshRoot() { return { version: 2, activeList: LIST_MIN, lists: { "1": blankList() }, settings: {} }; }
 function cleanList(L) {
   return {
     activeColor: L.activeColor ?? null, activeImportant: !!L.activeImportant,
     tiles: Array.isArray(L.tiles) ? L.tiles : [],
     favourites: Array.isArray(L.favourites) ? L.favourites : [],
-    history: Array.isArray(L.history) ? L.history : []
+    history: Array.isArray(L.history) ? L.history : [],
+    archive: Array.isArray(L.archive) ? L.archive : []
   };
 }
 
@@ -1099,6 +1118,7 @@ function switchList(n) {
   firstTiles = true; firstFav = true;   // new list rests at the bottom (newest)
   store.save();
   renderAll(); updateListButton();
+  if ($("archive").classList.contains("open")) renderArchivePage();   // archive is per-list
 }
 
 function openListMenu(anchor) {
@@ -1406,6 +1426,91 @@ $("btnShare").addEventListener("click", shareList);
 /* ════════════════════ BACKUP ════════════════════ */
 const ICO_EXPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 3v12m0-12l-4 4m4-4l4 4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
 const ICO_IMPORT = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 15V3m0 12l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>';
+const ICO_ARCHIVE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M9.5 12h5"/></svg>';
+const ICO_EYE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+const ICO_RESTORE = '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.3M3 3v3.3H6.3"/></svg>';
+
+/* ════════════════════ ARCHIVE (per-list, separate page) ════════════════════
+   The tiled board and history stream stay in sync (one live list). The archive
+   is a THIRD bucket: struck-out items are swept off the live list into it, and
+   viewed on their own scrollable page. Nothing here touches the live sync. */
+function archiveDone() {
+  const done = state.tiles.filter(t => t.done);
+  if (!done.length) { toast("No completed items to archive"); return; }
+  const now = Date.now();
+  done.forEach((t, i) => {
+    const key = norm(t.text);
+    const c = (t.hiColor === "pink" || t.hiColor === "cyan") ? t.hiColor : (t.important ? "pink" : null);
+    state.archive = state.archive.filter(x => norm(x.text) !== key);   // avoid duplicate pile-up
+    state.archive.push({ id: uid(), text: t.text, ts: now + i, hi: !!c, hiColor: c, done: true });
+    selected.delete(t.id);
+    removeByText(t.text);   // leave the live list from BOTH views
+  });
+  store.save(); renderTiles(); renderPeek(); renderHistory(); renderArchivePage();
+  toast(done.length + " moved to archive");
+}
+function restoreFromArchive(id) {
+  const a = state.archive.find(x => x.id === id); if (!a) return;
+  state.archive = state.archive.filter(x => x.id !== id);
+  const key = norm(a.text);
+  if (!state.tiles.some(t => norm(t.text) === key)) {   // only re-add if not already back on the list
+    const ts = Date.now();
+    const c = (a.hiColor === "pink" || a.hiColor === "cyan") ? a.hiColor : null;
+    state.tiles.push({ id: uid(), text: a.text, color: null, important: c === "pink", hiColor: c, done: false, createdAt: ts });
+    state.history.push({ id: uid(), text: a.text, ts, hi: !!c, hiColor: c, done: false });
+  }
+  store.save(); renderArchivePage(); renderTiles(); renderPeek(); renderHistory(); toast("Restored to list");
+}
+function deleteArchive(id) {
+  state.archive = state.archive.filter(x => x.id !== id);
+  store.save(); renderArchivePage(); toast("Deleted from archive");
+}
+function openArchivePopup(h, el) {
+  showPopup(el, [
+    { label: "Restore to list", icon: ICO_RESTORE, action: () => restoreFromArchive(h.id) },
+    { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteArchive(h.id) }
+  ]);
+}
+function renderArchivePage() {
+  const c = $("archScroll"); if (!c) return; c.innerHTML = "";
+  const items = state.archive.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));   // chronological, newest at the bottom
+  if (!items.length) {
+    c.innerHTML = '<div class="hist-empty">Archive is empty.<br>Strike out items on the list, then choose “Move completed to archive” from the backup menu.</div>';
+    return;
+  }
+  let lastLabel = null;
+  items.forEach(h => {
+    const label = dateLabel(h.ts);
+    if (label !== lastLabel) {
+      lastLabel = label;
+      const sep = document.createElement("div");
+      sep.className = "date-sep"; sep.innerHTML = "<span></span>";
+      sep.querySelector("span").textContent = label;
+      c.appendChild(sep);
+    }
+    const b = appendBubble(c, h, {
+      dblTap: () => openArchivePopup(h, b),
+      longPress: () => openArchivePopup(h, b),
+      swipeLeft: () => deleteArchive(h.id),
+      swipeRight: () => restoreFromArchive(h.id)
+    });
+  });
+  c.scrollTop = c.scrollHeight;
+}
+function openArchivePage() { hidePopup(); renderArchivePage(); $("archive").classList.add("open"); }
+function closeArchivePage() { $("archive").classList.remove("open"); }
+function confirmClearArchive(anchor) {
+  const n = state.archive.length;
+  if (!n) { toast("Archive is empty"); return; }
+  showPopup(anchor, [
+    { label: "Delete all " + n + " archived", icon: ICO_DEL, danger: true, action: () => {
+        state.archive = []; store.save(); renderArchivePage(); toast("Archive cleared");
+    } }
+  ]);
+}
+$("btnArchiveClose").addEventListener("click", closeArchivePage);
+$("btnArchiveClear").addEventListener("click", () => confirmClearArchive($("btnArchiveClear")));
+
 async function exportBackup() {
   store.saveNow();
   const data = JSON.stringify(root, null, 2);   // all lists in one file
@@ -1425,9 +1530,13 @@ async function exportBackup() {
 
 /* tapping the backup button offers both Export and Import */
 function openBackupMenu(anchor) {
+  const nDone = state.tiles.filter(t => t.done).length;
+  const nArch = state.archive.length;
   showPopup(anchor, [
     { label: "Export backup", icon: ICO_EXPORT, action: exportBackup },
     { label: "Import backup", icon: ICO_IMPORT, action: () => $("importFile").click() },
+    { label: "Move completed to archive" + (nDone ? " (" + nDone + ")" : ""), icon: ICO_ARCHIVE, action: archiveDone },
+    { label: "View archive" + (nArch ? " (" + nArch + ")" : ""), icon: ICO_EYE, action: openArchivePage },
     { label: "Clear list", icon: ICO_DEL, danger: true, action: () => confirmClearHistory(anchor) }
   ]);
 }
