@@ -497,13 +497,23 @@ const KEY = "manolist";   // localStorage namespace; data is always v2
 const LIST_MIN = 1, LIST_MAX = 9;
 function blankList() { return { activeColor: null, activeImportant: false, tiles: [], favourites: [], history: [], archive: [] }; }
 function freshRoot() { return { version: 2, activeList: LIST_MIN, lists: { "1": blankList() }, settings: {} }; }
+/* coerce one imported row to safe primitives — a hand-edited or malformed backup
+   must never wedge rendering (all display goes via textContent, so this is about
+   type safety, not XSS) */
+function cleanRow(x) {
+  if (!x || typeof x !== "object" || typeof x.text === "object") return null;
+  const s = String(x.text ?? "").trim();
+  if (!s) return null;
+  return { ...x, id: String(x.id ?? "") || Math.random().toString(36).slice(2), text: s };
+}
+function cleanRows(a) { return Array.isArray(a) ? a.map(cleanRow).filter(Boolean) : []; }
 function cleanList(L) {
   return {
     activeColor: L.activeColor ?? null, activeImportant: !!L.activeImportant,
-    tiles: Array.isArray(L.tiles) ? L.tiles : [],
-    favourites: Array.isArray(L.favourites) ? L.favourites : [],
-    history: Array.isArray(L.history) ? L.history : [],
-    archive: Array.isArray(L.archive) ? L.archive : []
+    tiles: cleanRows(L.tiles),
+    favourites: cleanRows(L.favourites),
+    history: cleanRows(L.history),
+    archive: cleanRows(L.archive)
   };
 }
 
@@ -1179,7 +1189,10 @@ function showPopup(anchorEl, buttons) {
     }
     const b = document.createElement("button");
     if (bt.danger) b.className = "danger";
-    b.innerHTML = bt.icon + "<span>" + bt.label + "</span>";
+    b.innerHTML = bt.icon;   // icon = static SVG constant, never user data
+    const lab = document.createElement("span");
+    lab.textContent = bt.label;   // label as text — safe even if it ever includes item text
+    b.appendChild(lab);
     b.onclick = () => { hidePopup(); bt.action(); };
     pop.appendChild(b);
   });
