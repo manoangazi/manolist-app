@@ -1402,8 +1402,11 @@ function openRowPopup(h, el) {
        and stripping the image off an uncaptioned row only left an empty bubble behind. */
     ...(h.photo ? [{ label: "View photo", icon: ICO_EDIT, action: () => openPhoto(h) }] : []),
     { label: h.done ? "Remove strikeout" : "Strikeout", icon: ICO_CHK, action: () => toggleRowDone(h) },
-    { label: hc === "pink" ? "Remove highlight" : "Highlight", icon: ICO_HILITE, action: () => toggleHighlightColor(h, "pink") },
-    { label: hc === "cyan" ? "Remove highlight" : "Cyan highlight", icon: ICO_HILITE_C, action: () => toggleHighlightColor(h, "cyan") },
+    /* On a photo row, highlighting is also what keeps the image from being aged out, so the
+       label says so. Text rows keep the plain name - they still have a real "Pin" entry below,
+       and calling this one "Highlight/Pin" there would read as a contradiction. */
+    { label: hc === "pink" ? "Remove highlight" : (h.photo ? "Highlight/Pin" : "Highlight"), icon: ICO_HILITE, action: () => toggleHighlightColor(h, "pink") },
+    { label: hc === "cyan" ? "Remove highlight" : (h.photo ? "Cyan highlight/Pin" : "Cyan highlight"), icon: ICO_HILITE_C, action: () => toggleHighlightColor(h, "cyan") },
     /* Pinning only ever stored the text, so a pinned photo gave you a chip that re-added a
        copy WITHOUT the picture - misleading rather than useful. Text-only items pin as before. */
     ...(h.photo ? [] : [isPinned(h.text)
