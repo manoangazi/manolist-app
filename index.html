@@ -677,7 +677,15 @@ function reconcileList(L) {
   const tileByText = new Map(), rowByText = new Map();
   // collapse any duplicate-text rows within each array (keep the first)
   L.tiles = (L.tiles || []).filter(t => { const k = norm(t.text); if (!k || tileByText.has(k)) return false; tileByText.set(k, t); return true; });
-  L.items = (L.items || []).filter(h => { const k = norm(h.text); if (!k || rowByText.has(k)) return false; delete h.archived; rowByText.set(k, h); return true; });
+  L.items = (L.items || []).filter(h => {
+    const k = norm(h.text);
+    if (!k) return false;
+    const kept = rowByText.get(k);
+    // duplicate name: fold it into the row we are keeping, carrying any photo across so
+    // collapsing pre-existing duplicates can never silently destroy an image
+    if (kept) { if (h.photo && !kept.photo) { kept.photo = h.photo; delete kept.photoEvicted; } return false; }
+    delete h.archived; rowByText.set(k, h); return true;
+  });
   // every tile needs a matching list bubble
   L.tiles.forEach(t => {
     const k = norm(t.text);
@@ -1420,7 +1428,15 @@ function startEditRow(h) {
   let closed = false;
   const commit = (save) => {
     if (closed) return; closed = true;
-    if (save) { const v = inp.value.trim(); if (v) { renameByText(h.text, v); delete h.autoText; } }   // rename in both views; a real caption replaces the generated label
+    if (save) {
+      const v = inp.value.trim();
+      if (v && norm(v) !== norm(h.text)) {
+        /* same guard the tile editor uses - without it, captioning a photo with the name of an
+           existing item makes the two rows indistinguishable to removeByText/setDoneByText */
+        if (state.items.some(x => x.id !== h.id && norm(x.text) === norm(v))) toast("Already on the list");
+        else { renameByText(h.text, v); delete h.autoText; }
+      } else if (v) { renameByText(h.text, v); delete h.autoText; }   // rename in both views; a real caption replaces the generated label
+    }
     store.save(); renderListView(); renderPeek(); renderTiles();
   };
   inp.addEventListener("keydown", (e) => {
