@@ -321,8 +321,13 @@ header {
 
 /* full-screen photo viewer */
 .photo-view { position: absolute; inset: 0; z-index: 50; display: none; background: rgba(0,0,0,.92); padding: 20px; }
-.photo-view.open { display: grid; place-items: center; }
-.photo-view img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.photo-view.open { display: grid; place-items: center; overflow: hidden; }
+/* touch-action:none so the pinch/pan handlers own the gesture instead of the page */
+.photo-view img {
+  max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px;
+  touch-action: none; transform-origin: center center; will-change: transform;
+  -webkit-user-select: none; user-select: none; -webkit-user-drag: none;
+}
 /* edit field reads as a standard iOS text field: white box, dark text, visible blue caret + focus ring */
 .bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: 2px solid #fff; outline-offset: 0; background: #fff; color: var(--text); caret-color: var(--accent); font-family: var(--font); font-size: calc(16.5px * var(--fs)); border-radius: 8px; padding: 4px 8px; }
 .bubble-edit::selection { background: var(--accent-soft); color: var(--text); }
@@ -1600,14 +1605,87 @@ $("photoLib").addEventListener("change", () => handlePhotoPick($("photoLib")));
 ["btnCamera","btnCameraH"].forEach(id => $(id).addEventListener("click", () => { photoTarget = null; $("photoCam").click(); }));
 ["btnPlus","btnPlusH"].forEach(id => $(id).addEventListener("click", () => { photoTarget = null; $("photoLib").click(); }));
 
-/* full-screen viewer - double-tap a thumbnail to open, tap anywhere to close */
+/* full-screen viewer - double-tap a thumbnail to open.
+   Pinch with two fingers to zoom, drag to pan while zoomed.
+   A plain tap resets a zoomed photo to fit, and closes it when already at fit.
+   The page sets user-scalable=no, so native pinch is unavailable and this is done by hand. */
+const photoView = $("photoView"), photoImg = $("photoViewImg");
+const PHOTO_ZOOM_MAX = 6;
+let pz = { s: 1, tx: 0, ty: 0 };   // current transform: scale + screen-px translation
+let pzStart = null;                // in-flight gesture, null when idle
+let pzMoved = false;               // did this gesture move at all? (a tap must not have)
+
+function pzApply() { photoImg.style.transform = "translate(" + pz.tx + "px," + pz.ty + "px) scale(" + pz.s + ")"; }
+function pzReset() { pz = { s: 1, tx: 0, ty: 0 }; photoImg.style.transform = ""; }
+const pzZoomed = () => pz.s > 1.01;
+/* never let the photo be dragged fully off screen: translation is bounded by how much
+   of the scaled image actually overflows the viewport */
+function pzClamp() {
+  const box = photoView.getBoundingClientRect();
+  const mx = Math.max(0, (photoImg.clientWidth * pz.s - box.width) / 2);
+  const my = Math.max(0, (photoImg.clientHeight * pz.s - box.height) / 2);
+  pz.tx = Math.min(mx, Math.max(-mx, pz.tx));
+  pz.ty = Math.min(my, Math.max(-my, pz.ty));
+}
+function pzDist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+function pzMid(a, b) { return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 }; }
+function pzPan(t) { return { m: { x: t.clientX, y: t.clientY }, tx: pz.tx, ty: pz.ty, pinch: false }; }
+
+photoView.addEventListener("touchstart", (e) => {
+  if (e.touches.length >= 2) {
+    const a = e.touches[0], b = e.touches[1];
+    pzStart = { d: pzDist(a, b) || 1, m: pzMid(a, b), s: pz.s, tx: pz.tx, ty: pz.ty, pinch: true };
+    pzMoved = true;   // a pinch is never a tap
+  } else if (e.touches.length === 1) {
+    pzStart = pzPan(e.touches[0]);
+    pzMoved = false;
+  }
+}, { passive: false });
+
+photoView.addEventListener("touchmove", (e) => {
+  if (!pzStart) return;
+  e.preventDefault();   // stop the page rubber-banding behind the viewer
+  const box = photoView.getBoundingClientRect();
+  const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+  if (pzStart.pinch && e.touches.length >= 2) {
+    const a = e.touches[0], b = e.touches[1];
+    const s2 = Math.min(PHOTO_ZOOM_MAX, Math.max(1, pzStart.s * (pzDist(a, b) / pzStart.d)));
+    const m = pzMid(a, b), k = s2 / pzStart.s;
+    /* hold the point between the fingers still while scaling (transform-origin is the
+       centre, so the translation has to absorb the difference), then follow the midpoint */
+    pz.tx = (pzStart.m.x - cx) - k * (pzStart.m.x - cx - pzStart.tx) + (m.x - pzStart.m.x);
+    pz.ty = (pzStart.m.y - cy) - k * (pzStart.m.y - cy - pzStart.ty) + (m.y - pzStart.m.y);
+    pz.s = s2;
+    pzMoved = true;
+  } else if (!pzStart.pinch && e.touches.length === 1) {
+    const t = e.touches[0];
+    const dx = t.clientX - pzStart.m.x, dy = t.clientY - pzStart.m.y;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) pzMoved = true;
+    if (!pzZoomed()) return;   // nothing to pan while the photo already fits
+    pz.tx = pzStart.tx + dx; pz.ty = pzStart.ty + dy;
+  } else return;
+  pzClamp(); pzApply();
+}, { passive: false });
+
+photoView.addEventListener("touchend", (e) => {
+  if (!pzStart) return;
+  if (e.touches.length === 1 && pzStart.pinch) { pzStart = pzPan(e.touches[0]); return; }   // pinch -> one-finger pan
+  if (e.touches.length > 0) return;
+  const tapped = !pzMoved;
+  pzStart = null; pzMoved = false;
+  if (!pzZoomed()) pzReset(); else { pzClamp(); pzApply(); }
+  if (tapped) { if (pzZoomed()) pzReset(); else closePhoto(); }
+});
+
 function openPhoto(h) {
   if (!h.photo) return;
-  $("photoViewImg").src = h.photo;
-  $("photoView").classList.add("open");
+  pzReset();   // always open at fit, never inheriting the last photo's zoom
+  photoImg.src = h.photo;
+  photoView.classList.add("open");
 }
-function closePhoto() { $("photoView").classList.remove("open"); $("photoViewImg").removeAttribute("src"); }
-$("photoView").addEventListener("click", closePhoto);
+function closePhoto() { pzReset(); photoView.classList.remove("open"); photoImg.removeAttribute("src"); }
+/* mouse fallback for desktop; touchRecent() keeps the synthetic click after a tap out */
+photoView.addEventListener("click", () => { if (touchRecent()) return; if (pzZoomed()) pzReset(); else closePhoto(); });
 
 /* ════════════════════ NAV ════════════════════ */
 /* filled blue circle + white check = list view active */
