@@ -304,7 +304,9 @@ header {
 .bubble time { font-size: calc(12.5px * var(--fs)); color: rgba(255,255,255,.85); flex: 0 0 auto; }
 /* photo attachment - stacks above the caption/time row inside the same bubble */
 .bubble.has-photo { flex-direction: column; align-items: flex-end; gap: 6px; }
-.bubble.has-photo .bubble-foot { display: flex; align-items: flex-end; gap: 8px; align-self: stretch; }
+/* the blue strip under the picture is the caption row - long-press it to edit the caption,
+   so it needs to stay a comfortable target even when there is no caption yet */
+.bubble.has-photo .bubble-foot { display: flex; align-items: flex-end; gap: 8px; align-self: stretch; min-height: 20px; }
 .bubble-photo {
   display: block; width: 180px; max-width: 100%; height: 180px; object-fit: cover;
   border-radius: 10px; background: rgba(255,255,255,.15); align-self: stretch;
@@ -1167,7 +1169,11 @@ function appendBubble(c, h, handlers, archived) {
          on the rest of the row. */
       ["touchstart","touchend","mousedown","mouseup","click"].forEach(ev =>
         thumb.addEventListener(ev, (e) => e.stopPropagation(), { passive: true }));
-      gestures(thumb, { dblTap: () => openPhoto(h) });
+      gestures(thumb, {
+        dblTap: () => openPhoto(h),
+        /* the caption strip below now owns long-press, so the picture carries the row menu */
+        longPress: (ev) => { if (handlers.longPress) handlers.longPress(ev); }
+      });
     } else {
       thumb = document.createElement("div");
       thumb.className = "bubble-photo gone";
@@ -1216,7 +1222,12 @@ function renderListView() {
     }
     const b = appendBubble(c, h, {
       dblTap: () => toggleRowDone(h),
-      longPress: () => openRowPopup(h, b),
+      /* on a photo row the strip under the picture is the caption: long-press it to edit.
+         Anywhere else on the bubble - including the picture - opens the row menu. */
+      longPress: (ev) => {
+        const onCaption = ev && ev.target && ev.target.closest && ev.target.closest(".bubble-foot");
+        if (onCaption) startEditRow(h); else openRowPopup(h, b);
+      },
       swipeLeft: () => deleteRow(h.id),
       swipeRight: () => { if (isPinned(h.text)) toast("Already pinned"); else pinItem(h.text); }
     });
@@ -1376,8 +1387,9 @@ function openRowPopup(h, el) {
     ...(h.photo ? [
       /* a reliable way in that does not depend on the double-tap surviving iOS's own gestures */
       { label: "View photo", icon: ICO_EDIT, action: () => openPhoto(h) },
-      { label: "Replace photo", icon: ICO_EDIT, action: () => { photoTarget = h; $("photoCam").click(); } },
-      { label: "Remove photo", icon: ICO_DEL, action: () => { delete h.photo; delete h.photoEvicted; store.save(); renderListView(); toast("Photo removed"); } }
+      { label: "Replace photo", icon: ICO_EDIT, action: () => { photoTarget = h; $("photoCam").click(); } }
+      /* no "Remove photo": Delete removes the item outright, and stripping the image off an
+         uncaptioned row only left an empty bubble and an orphan tile to clean up separately */
     ] : []),
     { label: h.done ? "Remove strikeout" : "Strikeout", icon: ICO_CHK, action: () => toggleRowDone(h) },
     { label: hc === "pink" ? "Remove highlight" : "Highlight", icon: ICO_HILITE, action: () => toggleHighlightColor(h, "pink") },
