@@ -308,6 +308,12 @@ header {
 .bubble-photo {
   display: block; width: 180px; max-width: 100%; height: 180px; object-fit: cover;
   border-radius: 10px; background: rgba(255,255,255,.15); align-self: stretch;
+  /* iOS ignores user-scalable=no, so its own double-tap-to-zoom is live and an <img> is a
+     prime target for it - it would swallow the second tap before our dblTap ever sees it.
+     `manipulation` keeps scrolling and pinch, and turns only the double-tap gesture off. */
+  touch-action: manipulation;
+  /* no long-press "Save Image" callout - long-press belongs to the row popup */
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   /* keeps the photo readable as its own object even when its edges match the bubble fill */
   box-shadow: 0 0 0 1px rgba(255,255,255,.45);
 }
@@ -320,13 +326,15 @@ header {
 }
 
 /* full-screen photo viewer */
-.photo-view { position: absolute; inset: 0; z-index: 50; display: none; background: rgba(0,0,0,.92); padding: 20px; }
+.photo-view { position: absolute; inset: 0; z-index: 50; display: none; background: rgba(0,0,0,.92); padding: 20px;
+  touch-action: none; -webkit-touch-callout: none; }
 .photo-view.open { display: grid; place-items: center; overflow: hidden; }
 /* touch-action:none so the pinch/pan handlers own the gesture instead of the page */
 .photo-view img {
   max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px;
-  touch-action: none; transform-origin: center center; will-change: transform;
+  touch-action: none; transform-origin: center center;
   -webkit-user-select: none; user-select: none; -webkit-user-drag: none;
+  -webkit-touch-callout: none;
 }
 /* edit field reads as a standard iOS text field: white box, dark text, visible blue caret + focus ring */
 .bubble-edit { flex: 1 1 auto; min-width: 120px; border: none; outline: 2px solid #fff; outline-offset: 0; background: #fff; color: var(--text); caret-color: var(--accent); font-family: var(--font); font-size: calc(16.5px * var(--fs)); border-radius: 8px; padding: 4px 8px; }
@@ -1366,6 +1374,8 @@ function openRowPopup(h, el) {
       })) },
     { label: "Edit", icon: ICO_EDIT, action: () => startEditRow(h) },
     ...(h.photo ? [
+      /* a reliable way in that does not depend on the double-tap surviving iOS's own gestures */
+      { label: "View photo", icon: ICO_EDIT, action: () => openPhoto(h) },
       { label: "Replace photo", icon: ICO_EDIT, action: () => { photoTarget = h; $("photoCam").click(); } },
       { label: "Remove photo", icon: ICO_DEL, action: () => { delete h.photo; delete h.photoEvicted; store.save(); renderListView(); toast("Photo removed"); } }
     ] : []),
@@ -1608,7 +1618,8 @@ $("photoLib").addEventListener("change", () => handlePhotoPick($("photoLib")));
 /* full-screen viewer - double-tap a thumbnail to open.
    Pinch with two fingers to zoom, drag to pan while zoomed.
    A plain tap resets a zoomed photo to fit, and closes it when already at fit.
-   The page sets user-scalable=no, so native pinch is unavailable and this is done by hand. */
+   NB: iOS Safari has ignored user-scalable=no since iOS 10, so the page IS natively
+   pinch-zoomable on iPhone. The viewer sets touch-action:none to take the gesture back. */
 const photoView = $("photoView"), photoImg = $("photoViewImg");
 const PHOTO_ZOOM_MAX = 6;
 let pz = { s: 1, tx: 0, ty: 0 };   // current transform: scale + screen-px translation
