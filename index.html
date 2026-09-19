@@ -610,10 +610,12 @@ function evictOldestPhotos(n) {
   const rows = [];
   Object.keys(root.lists).forEach(k => {
     const L = root.lists[k];
-    const pinned = new Set((L.favourites || []).map(f => norm(f.text)));
     (L.items || []).forEach(h => {
       if (!h.photo) return;
-      rows.push({ h, ts: h.ts || 0, spare: (pinned.has(norm(h.text)) || !!highlightColor(h)) ? 1 : 0 });
+      /* a highlighted photo goes last - note that is "evicted last", not "never evicted":
+         if everything is highlighted the oldest still goes, so highlighting all of them
+         protects none of them */
+      rows.push({ h, ts: h.ts || 0, spare: highlightColor(h) ? 1 : 0 });
     });
   });
   if (!rows.length) return 0;
@@ -1237,7 +1239,10 @@ function renderListView() {
         if (onCaption) startEditRow(h); else openRowPopup(h, b);
       },
       swipeLeft: () => deleteRow(h.id),
-      swipeRight: () => { if (isPinned(h.text)) toast("Already pinned"); else pinItem(h.text); }
+      swipeRight: () => {
+        if (h.photo) { toast("Photos can't be pinned"); return; }   // a pinned chip carries text only
+        if (isPinned(h.text)) toast("Already pinned"); else pinItem(h.text);
+      }
     });
   });
   c.scrollTop = c.scrollHeight;
@@ -1392,19 +1397,18 @@ function openRowPopup(h, el) {
         }
       })) },
     { label: "Edit", icon: ICO_EDIT, action: () => startEditRow(h) },
-    ...(h.photo ? [
-      /* a reliable way in that does not depend on the double-tap surviving iOS's own gestures */
-      { label: "View photo", icon: ICO_EDIT, action: () => openPhoto(h) },
-      { label: "Replace photo", icon: ICO_EDIT, action: () => { photoTarget = h; $("photoCam").click(); } }
-      /* no "Remove photo": Delete removes the item outright, and stripping the image off an
-         uncaptioned row only left an empty bubble and an orphan tile to clean up separately */
-    ] : []),
+    /* a reliable way in that does not depend on the double-tap surviving iOS's own gestures.
+       No "Remove photo" or "Replace photo": Delete removes the item outright and you retake it,
+       and stripping the image off an uncaptioned row only left an empty bubble behind. */
+    ...(h.photo ? [{ label: "View photo", icon: ICO_EDIT, action: () => openPhoto(h) }] : []),
     { label: h.done ? "Remove strikeout" : "Strikeout", icon: ICO_CHK, action: () => toggleRowDone(h) },
     { label: hc === "pink" ? "Remove highlight" : "Highlight", icon: ICO_HILITE, action: () => toggleHighlightColor(h, "pink") },
     { label: hc === "cyan" ? "Remove highlight" : "Cyan highlight", icon: ICO_HILITE_C, action: () => toggleHighlightColor(h, "cyan") },
-    isPinned(h.text)
+    /* Pinning only ever stored the text, so a pinned photo gave you a chip that re-added a
+       copy WITHOUT the picture - misleading rather than useful. Text-only items pin as before. */
+    ...(h.photo ? [] : [isPinned(h.text)
       ? { label: "Unpin", icon: ICO_PIN, action: () => unpinItem(h.text) }
-      : { label: "Pin", icon: ICO_PIN, action: () => pinItem(h.text) },
+      : { label: "Pin", icon: ICO_PIN, action: () => pinItem(h.text) }]),
     { label: "Delete", icon: ICO_DEL, danger: true, action: () => deleteRow(h.id) }
   ]);
 }
@@ -1595,19 +1599,8 @@ function makeRoomFor(extraChars) {
   return freed;
 }
 
-/* Attach a photo to a new list row, or to `target` when replacing an existing one. */
-function commitPhoto(dataUri, target) {
-  if (target) {
-    const prev = target.photo;
-    target.photo = dataUri; delete target.photoEvicted;
-    makeRoomFor(0);
-    if (!store.saveNow()) {
-      if (prev) target.photo = prev; else delete target.photo;
-      renderListView(); return;
-    }
-    renderListView(); toast("Photo replaced");
-    return;
-  }
+/* Attach a photo to a new list row. */
+function commitPhoto(dataUri) {
   const caption = listInput.value.trim();
   makeRoomFor(dataUri.length);
   const ts = Date.now();
@@ -1629,19 +1622,17 @@ function commitPhoto(dataUri, target) {
   renderTiles(); renderPeek(); renderListView();
 }
 
-let photoTarget = null;   // set when replacing an existing row's photo
 async function handlePhotoPick(input) {
   const file = input.files && input.files[0];
-  const target = photoTarget; photoTarget = null;
   input.value = "";   // so picking the same file twice still fires change
   if (!file) return;
-  try { commitPhoto(await shrinkImage(file), target); }
+  try { commitPhoto(await shrinkImage(file)); }
   catch (e) { toast("Could not read that image"); }
 }
 $("photoCam").addEventListener("change", () => handlePhotoPick($("photoCam")));
 $("photoLib").addEventListener("change", () => handlePhotoPick($("photoLib")));
-["btnCamera","btnCameraH"].forEach(id => $(id).addEventListener("click", () => { photoTarget = null; $("photoCam").click(); }));
-["btnPlus","btnPlusH"].forEach(id => $(id).addEventListener("click", () => { photoTarget = null; $("photoLib").click(); }));
+["btnCamera","btnCameraH"].forEach(id => $(id).addEventListener("click", () => $("photoCam").click()));
+["btnPlus","btnPlusH"].forEach(id => $(id).addEventListener("click", () => $("photoLib").click()));
 
 /* full-screen viewer - double-tap a thumbnail to open.
    Pinch with two fingers to zoom, drag to pan while zoomed.
